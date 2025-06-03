@@ -9,6 +9,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import Data.Void (Void)
 import qualified Text.Megaparsec.Char.Lexer as L
+import Data.Bits
 
 type Parser = Parsec Void String
 
@@ -167,12 +168,17 @@ evalConstExpr (Add a b) = binConstExpr (+) a b
 evalConstExpr (Sub a b) = binConstExpr (-) a b
 evalConstExpr (Mul a b) = binConstExpr (*) a b
 evalConstExpr (Div a b) = binConstExpr (div) a b
+evalConstExpr (Mod a b) = binConstExpr (mod) a b
 evalConstExpr (Ge a b) = binConstExpr (\x y -> if x >= y then 1 else 0) a b
 evalConstExpr (Gt a b) = binConstExpr (\x y -> if x > y then 1 else 0) a b
 evalConstExpr (Le a b) = binConstExpr (\x y -> if x <= y then 1 else 0) a b
 evalConstExpr (Lt a b) = binConstExpr (\x y -> if x < y then 1 else 0) a b
 evalConstExpr (Eq a b) = binConstExpr (\x y -> if x == y then 1 else 0) a b
 evalConstExpr (NotEq a b) = binConstExpr (\x y -> if x /= y then 1 else 0) a b
+evalConstExpr (BitAnd a b) = binConstExpr (.&.) a b
+evalConstExpr (BitOr a b) = binConstExpr (.|.) a b
+evalConstExpr (ShiftL a b) = binConstExpr (shiftL) a b
+evalConstExpr (ShiftR a b) = binConstExpr (shiftR) a b
 evalConstExpr _ = Nothing
 
 -- Binary constant expression evaluation
@@ -182,7 +188,7 @@ binConstExpr f a b = do
     bVal <- evalConstExpr b
     return $ f aVal bVal
 
--- Checking if an expression is an LValue (left side value, can be assigned to)
+-- Checking if all expressions that need to be LValue (left side value, can be assigned to) are
 -- Note that putting an * before an RValue makes it an LValue
-isLValue :: Expr -> Bool
-isLValue = undefined
+correctLValues :: Expr -> Bool
+correctLValues = undefined

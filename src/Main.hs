@@ -5,10 +5,10 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 
 main :: IO ()
-main = parseTest (P.pExpr <* char ';') "var >>= 1;"
--- main = let 
---             e = parse (P.pExpr <* char ';') "src" "(1 + (200 * 3) / 2 / 2 >= 150 + 2) - 1 - 10000 < 10000000;"
---             printQ = putStrLn . show
---        in case e of
---             Right res -> printQ $ P.evalConstExpr res
---             Left err -> putStr $ errorBundlePretty err
+-- main = parseTest (P.pExpr <* char ';') "var >>= 1 <<= 2 + 2 + 23;"
+main = let 
+            e = parse (P.pExpr <* char ';') "src" "4 >> 1;"
+            printQ = putStrLn . show
+       in case e of
+            Right res -> printQ $ P.evalConstExpr res
+            Left err -> putStr $ errorBundlePretty err
