@@ -53,26 +53,31 @@ extra-doc-files:    CHANGELOG.md
 common warnings
     ghc-options: -Wall
 
-executable bc
-    -- Import common warning flags.
+library
     import:           warnings
-
-    -- .hs or .lhs file containing the Main module.
-    main-is:          Main.hs
-
-    -- Modules included in this executable, other than Main.
-    other-modules:    Parser
-
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-
-    -- Other library packages from which modules are imported.
+    exposed-modules:  Parser
     build-depends:    base ^>=4.19.2.0,
                       megaparsec ^>= 9.7.0,
                       parser-combinators ^>= 1.3.0
-
-    -- Directories containing source files.
-    hs-source-dirs:   src
-
-    -- Base language which the package is written in.
+    hs-source-dirs:   src/BC/
     default-language: Haskell2010
+
+executable bc
+    import:           warnings
+    main-is:          Main.hs
+    build-depends:    base ^>=4.19.2.0,
+                      megaparsec ^>= 9.7.0,
+                      bc
+    hs-source-dirs:   exe
+    default-language: Haskell2010
+
+test-suite bc-test
+    default-language: Haskell2010
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: Main.hs
+    build-depends:   base ^>= 4.19.2.0
+                   , hspec ^>= 2.11.12
+                   , hspec-megaparsec ^>= 2.2.1
+                   , megaparsec >= 9.7.0
+                   , bc
