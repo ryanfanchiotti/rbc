@@ -1,4 +1,4 @@
-module Parser (
+module BC.Parser (
     Expr(..),
     pExpr,
     evalConstExpr
@@ -30,6 +30,7 @@ data Expr
     | IncR Expr
     | DecL Expr
     | DecR Expr
+    | Not Expr -- Takes an integer, returns 1 if zero and 0 in all other cases
 
     -- Binary primitive operations
     -- Note that there are no short circuiters (||, &&, etc) and no bitwise xor or not here!
@@ -113,7 +114,7 @@ pExpr = makeExprParser pTerm operatorTable
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
     [ [vecIdx, funCall, postfix "--" DecR, postfix "++" IncR]
-    , [prefix "--" DecL, prefix "++" IncL, prefix "-" Neg, prefix "+" id, prefix "*" Deref, prefix "&" Addr]
+    , [prefix "--" DecL, prefix "++" IncL, prefix "-" Neg, prefix "+" id, prefix "*" Deref, prefix "&" Addr, prefix "!" Not]
     , [binaryNF '=' "*" Mul, binaryNF '=' "/" Div, binaryNF '=' "%" Mod]
     , [binaryNF '=' "+" Add, binaryNF '=' "-" Sub]
     , [binaryNF '=' "<<" ShiftL, binaryNF '=' ">>" ShiftR]
