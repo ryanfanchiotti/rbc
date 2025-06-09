@@ -37,7 +37,9 @@ checkExprs = describe "tests for expressions" $ do
         parse (pExpr <* eof) "" "--a + *z" `shouldParse` (Add (DecL (Var "a")) (Deref (Var "z")))
     it "parses prefix not and equality" $
         parse (pExpr <* eof) "" "a == !a" `shouldParse` (Eq (Var "a") (Not (Var "a")))
-
+    it "parses a function call with an expr as the function" $
+        parse (pExpr <* eof) "" "(a+2)(a, b, c)" `shouldParse` (FunCall [Var "a", Var "b", Var "c"] (Add (Var "a") (IntT 2)))
+ 
 -- Tests for constant expression evaluation
 checkConstExprEval :: Spec
 checkConstExprEval = describe "tests for constant expression evaluation" $ do

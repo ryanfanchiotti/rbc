@@ -189,7 +189,27 @@ binConstExpr f a b = do
     bVal <- evalConstExpr b
     return $ f aVal bVal
 
+isLValue :: Expr -> Bool
+isLValue = undefined
+
 -- Checking if all expressions that need to be LValue (left side value, can be assigned to) are
 -- Note that putting an * before an RValue makes it an LValue
 correctLValues :: Expr -> Bool
-correctLValues = undefined
+correctLValues (Addr e) = isLValue e && correctLValues e
+correctLValues (IncL e) = isLValue e && correctLValues e
+correctLValues (IncR e) = isLValue e && correctLValues e
+correctLValues (DecL e) = isLValue e && correctLValues e
+correctLValues (IncR e) = isLValue e && correctLValues e
+correctLValues (Assign a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignAdd a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignSub a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignMul a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignDiv a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignMod a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignBitOr a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignBitAnd a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignShiftL a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (AssignShiftR a b) = isLValue a && correctLValues a && correctLValues b
+correctLValues (TernIf a b c) = correctLValues a && correctLValues b && correctLValues c
+correctLValues (FunCall args name) = undefined
+correctLValues _ = True -- Base case for variables, integers, etc
