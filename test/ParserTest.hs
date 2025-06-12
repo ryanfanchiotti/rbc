@@ -39,6 +39,12 @@ checkExprs = describe "tests for expressions" $ do
         parse (pExpr <* eof) "" "a == !a" `shouldParse` (Eq (Var "a") (Not (Var "a")))
     it "parses a function call with an expr as the function" $
         parse (pExpr <* eof) "" "(a+2)(a, b, c)" `shouldParse` (FunCall [Var "a", Var "b", Var "c"] (Add (Var "a") (IntT 2)))
+    it "parses an assignment to a string" $
+        parse (pExpr <* eof) "" "a = \"testing\"" `shouldParse` (Assign (Var "a") (StringT "testing"))
+    it "parses an assignment to a string with escapes" $
+        parse (pExpr <* eof) "" "a = \"a\nb\tc\"" `shouldParse` (Assign (Var "a") (StringT "a\nb\tc"))
+    it "parses an assignment to a string with escaped quotations" $
+        parse (pExpr <* eof) "" "a = \"testing\\\"testing\"" `shouldParse` (Assign (Var "a") (StringT "testing\"testing"))
  
 -- Tests for constant expression evaluation
 checkConstExprEval :: Spec
@@ -51,6 +57,8 @@ checkConstExprEval = describe "tests for constant expression evaluation" $ do
         evalConstExpr (Add (Var "a") (IntT 2)) == Nothing
     it "evaluates equality and bitwise or" $
         evalConstExpr (Eq (BitOr (IntT 7) (IntT 8)) (IntT 15)) == (Just 1)
+    it "evaluates logical not" $
+        evalConstExpr (Not (Add (IntT 8) (IntT 34))) == (Just 0)
 
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do

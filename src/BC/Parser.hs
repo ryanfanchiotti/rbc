@@ -21,6 +21,7 @@ data Expr
     -- Basic primitive types
     | IntT Int
     | FloatT Double
+    | StringT String
     
     -- Unary primitive operations
     | Neg Expr
@@ -95,6 +96,13 @@ pOctal = IntT <$> lexeme (char '0' >> L.octal)
 pFloat :: Parser Expr
 pFloat = FloatT <$> lexeme L.float
 
+pString :: Parser Expr
+pString = StringT <$> lexeme (between (symbol "\"") (symbol "\"") contents)
+  where
+    -- Replace \" with ", all other escapes should be fine?
+    contents = many (escape <|> noneOf "\"")
+    escape = char '\\' >> char '"'
+
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
@@ -105,6 +113,7 @@ pTerm = choice
     , try pFloat
     , pOctal
     , pInteger
+    , pString
     ]
 
 pExpr :: Parser Expr
@@ -165,6 +174,9 @@ evalConstExpr (IntT i) = Just i
 evalConstExpr (Neg e) = do
     res <- evalConstExpr e
     return $ -res
+evalConstExpr (Not e) = do
+    res <- evalConstExpr e
+    return (if res == 0 then 1 else 0)
 evalConstExpr (Add a b) = binConstExpr (+) a b
 evalConstExpr (Sub a b) = binConstExpr (-) a b
 evalConstExpr (Mul a b) = binConstExpr (*) a b
@@ -188,28 +200,3 @@ binConstExpr f a b = do
     aVal <- evalConstExpr a
     bVal <- evalConstExpr b
     return $ f aVal bVal
-
-isLValue :: Expr -> Bool
-isLValue = undefined
-
--- Checking if all expressions that need to be LValue (left side value, can be assigned to) are
--- Note that putting an * before an RValue makes it an LValue
-correctLValues :: Expr -> Bool
-correctLValues (Addr e) = isLValue e && correctLValues e
-correctLValues (IncL e) = isLValue e && correctLValues e
-correctLValues (IncR e) = isLValue e && correctLValues e
-correctLValues (DecL e) = isLValue e && correctLValues e
-correctLValues (IncR e) = isLValue e && correctLValues e
-correctLValues (Assign a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignAdd a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignSub a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignMul a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignDiv a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignMod a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignBitOr a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignBitAnd a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignShiftL a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (AssignShiftR a b) = isLValue a && correctLValues a && correctLValues b
-correctLValues (TernIf a b c) = correctLValues a && correctLValues b && correctLValues c
-correctLValues (FunCall args name) = undefined
-correctLValues _ = True -- Base case for variables, integers, etc
