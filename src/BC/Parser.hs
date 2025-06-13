@@ -1,7 +1,8 @@
 module BC.Parser (
     Expr(..),
     pExpr,
-    evalConstExpr
+    evalConstExpr,
+    Statement(..)
 ) where
 
 import Control.Monad.Combinators.Expr
@@ -212,9 +213,9 @@ binConstExpr f a b = do
     bVal <- evalConstExpr b
     return $ f aVal bVal
 
--- Roughly corresponds to the `statement` in the B grammar
+-- Roughly corresponds to `statement` in the B grammar
 -- Some weird constructs such as chained declarations have been taken out
--- (ex: auto a; b is not treated like one statement here; this is only relevant for one line for loops and other silly things)
+-- (ex: auto a; b is not treated like one statement here; this is only relevant for one line while loops and other silly things)
 data Statement
     = Auto [(String, Maybe Expr)]
     | Extern [String]
