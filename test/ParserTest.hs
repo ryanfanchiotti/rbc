@@ -45,6 +45,8 @@ checkExprs = describe "tests for expressions" $ do
         parse (pExpr <* eof) "" "a = \"a\nb\tc\"" `shouldParse` (Assign (Var "a") (StringT "a\nb\tc"))
     it "parses an assignment to a string with escaped quotations" $
         parse (pExpr <* eof) "" "a = \"testing\\\"testing\"" `shouldParse` (Assign (Var "a") (StringT "testing\"testing"))
+    it "parses multiple unary operators in the right order" $
+        parse (pExpr <* eof) "" "-!x++" `shouldParse` (Neg (Not (IncR (Var "x"))))
  
 -- Tests for constant expression evaluation
 checkConstExprEval :: Spec

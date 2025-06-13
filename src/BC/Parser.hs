@@ -14,7 +14,7 @@ import Data.Bits
 type Parser = Parsec Void String
 
 -- Essentially an RValue, will need to be checked for LValues in
--- assignment, increment, decrement, address
+-- assignment, increment, decrement, address at a later stage
 data Expr
     = Var String -- ^ Variable name
 
@@ -123,7 +123,7 @@ pExpr = makeExprParser pTerm operatorTable
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
     [ [vecIdx, funCall, postfix "--" DecR, postfix "++" IncR]
-    , [prefix "--" DecL, prefix "++" IncL, prefix "-" Neg, prefix "+" id, prefix "*" Deref, prefix "&" Addr, prefix "!" Not]
+    , [Prefix unaryPrefixOps]
     , [binaryNF '=' "*" Mul, binaryNF '=' "/" Div, binaryNF '=' "%" Mod]
     , [binaryNF '=' "+" Add, binaryNF '=' "-" Sub]
     , [binaryNF '=' "<<" ShiftL, binaryNF '=' ">>" ShiftR]
@@ -137,6 +137,17 @@ operatorTable =
       , binary ">>=" AssignShiftR]
     ]
 
+-- Necessary for parsing multiple unary operations in a row
+unaryPrefixOps :: Parser (Expr -> Expr)
+unaryPrefixOps = foldr1 (.) <$> some (
+        DecL <$ symbol "--" <|> 
+        IncL <$ symbol "++" <|> 
+        Neg <$ symbol "-" <|> 
+        Deref <$ symbol "*" <|>
+        Addr <$ symbol "&" <|>
+        Not <$ symbol "!"
+    )
+
 binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
 binary name f = InfixL (f <$ symbol name)
 
@@ -146,8 +157,8 @@ binaryNF notEnd name f = InfixL $ do
     try $ symbol name >> notFollowedBy (char notEnd)
     return f
 
-prefix :: String -> (Expr -> Expr) -> Operator Parser Expr
-prefix name f = Prefix (f <$ symbol name)
+-- prefix :: String -> (Expr -> Expr) -> Operator Parser Expr
+-- prefix name f = Prefix (f <$ symbol name)
 
 postfix :: String -> (Expr -> Expr) -> Operator Parser Expr
 postfix name f = Postfix (f <$ symbol name)
@@ -200,3 +211,20 @@ binConstExpr f a b = do
     aVal <- evalConstExpr a
     bVal <- evalConstExpr b
     return $ f aVal bVal
+
+-- Roughly corresponds to the `statement` in the B grammar
+-- Some weird constructs such as chained declarations have been taken out
+-- (ex: auto a; b is not treated like one statement here; this is only relevant for one line for loops and other silly things)
+data Statement
+    = Auto [(String, Maybe Expr)]
+    | Extern [String]
+    | Label String
+    | Case Expr Statement
+    | Compound [Statement]
+    | If Expr Statement
+    | IfElse Expr Statement Statement
+    | While Expr Statement
+    | Switch Expr Statement
+    | Goto String
+    | Return Expr
+    | ExprT Expr
