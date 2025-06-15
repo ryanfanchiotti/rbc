@@ -180,7 +180,7 @@ funCall = Postfix (FunCall <$> parens (pExpr `sepBy` symbol ","))
 -- According to the spec, this means
 -- Any valid combination of numeric or character constants, unary operators, binary operators, and parentheses
 -- No assignment should happen here
--- It also "must give an integer result", so floating point numbers are not allowed
+-- It also "must give an integer result", so floating point numbers and strings are not allowed
 evalConstExpr :: Expr -> Maybe Int
 evalConstExpr (IntT i) = Just i
 evalConstExpr (Neg e) = do
@@ -229,3 +229,53 @@ data Statement
     | Goto String
     | Return Expr
     | ExprT Expr
+
+pStatement :: Parser Statement
+pStatement = pAuto <|>
+             pExtern <|>
+             pCase <|>
+             pCompound <|>
+             (try pIfElse) <|>
+             pIf <|>
+             pWhile <|>
+             pSwitch <|>
+             pGoto <|>
+             pReturn <|>
+             pLabel <|>
+             pExprT
+
+pAuto :: Parser Statement
+pAuto = undefined
+
+pExtern :: Parser Statement
+pExtern = undefined
+
+pLabel :: Parser Statement
+pLabel = undefined
+
+pCase :: Parser Statement
+pCase = undefined
+
+pCompound :: Parser Statement
+pCompound = undefined
+
+pIf :: Parser Statement
+pIf = undefined
+
+pIfElse :: Parser Statement
+pIfElse = undefined
+
+pWhile :: Parser Statement
+pWhile = undefined
+
+pSwitch :: Parser Statement
+pSwitch = undefined
+
+pGoto :: Parser Statement
+pGoto = undefined
+
+pReturn :: Parser Statement
+pReturn = undefined
+
+pExprT :: Parser Statement
+pExprT = undefined
