@@ -2,7 +2,8 @@ module BC.Parser (
     Expr(..),
     pExpr,
     evalConstExpr,
-    Statement(..)
+    Statement(..),
+    pStatement
 ) where
 
 import Control.Monad.Combinators.Expr
@@ -84,8 +85,7 @@ symbol = L.symbol sc
 
 -- Parser for a variable name
 pVariable :: Parser Expr
-pVariable = Var <$> lexeme
-  ((:) <$> letterChar <*> many alphaNumChar <?> "variable")
+pVariable = Var <$> pName
 
 -- Parsers for number types
 pInteger :: Parser Expr
@@ -219,9 +219,11 @@ binConstExpr f a b = do
 data Statement
     = Auto [(String, Maybe Expr)]
     | Extern [String]
-    | Label String
-    | Case Expr Statement
-    | Compound [Statement]
+    | LabelDec String -- L2:
+    -- Note that case isn't chained to another statement on purpose because switches without compound statements are usually not intended 
+    -- This should also always have a const-expr according to the spec
+    | Case Expr 
+    | Compound [Statement] -- {a; b; c;}
     | If Expr Statement
     | IfElse Expr Statement Statement
     | While Expr Statement
@@ -229,20 +231,21 @@ data Statement
     | Goto String
     | Return Expr
     | ExprT Expr
+    deriving (Eq, Ord, Show)
 
 pStatement :: Parser Statement
-pStatement = pAuto <|>
-             pExtern <|>
-             pCase <|>
-             pCompound <|>
-             (try pIfElse) <|>
-             pIf <|>
-             pWhile <|>
-             pSwitch <|>
+pStatement = -- pAuto <|>
+             -- pExtern <|>
+             -- pCase <|>
+             -- pCompound <|>
+             -- (try pIfElse) <|>
+             -- pIf <|>
+             -- pWhile <|>
+             -- pSwitch <|>
              pGoto <|>
              pReturn <|>
-             pLabel <|>
-             pExprT
+             (try pExprT) <|>
+             pLabelDec -- parses last since it overlaps with expression
 
 pAuto :: Parser Statement
 pAuto = undefined
@@ -250,8 +253,11 @@ pAuto = undefined
 pExtern :: Parser Statement
 pExtern = undefined
 
-pLabel :: Parser Statement
-pLabel = undefined
+pLabelDec :: Parser Statement
+pLabelDec = do
+    label_name <- pName
+    _ <- symbol ":"
+    return $ LabelDec label_name
 
 pCase :: Parser Statement
 pCase = undefined
@@ -272,10 +278,22 @@ pSwitch :: Parser Statement
 pSwitch = undefined
 
 pGoto :: Parser Statement
-pGoto = undefined
+pGoto = do
+    _ <- lexeme $ string "goto"
+    label_name <- pName
+    _ <- symbol ";"
+    return $ Goto label_name
 
 pReturn :: Parser Statement
-pReturn = undefined
+pReturn = do
+    _ <- lexeme $ string "return"
+    expr <- pExpr
+    _ <- symbol ";"
+    return $ Return expr
 
 pExprT :: Parser Statement
-pExprT = undefined
+pExprT = ExprT <$> (pExpr <* (symbol ";"))
+
+pName :: Parser String
+pName = lexeme
+  ((:) <$> letterChar <*> many alphaNumChar <?> "name (alpha numeric, starting with letter)")

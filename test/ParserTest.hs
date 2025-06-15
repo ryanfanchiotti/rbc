@@ -62,7 +62,22 @@ checkConstExprEval = describe "tests for constant expression evaluation" $ do
     it "evaluates logical not" $
         evalConstExpr (Not (Add (IntT 8) (IntT 34))) == (Just 0)
 
+-- Tests for statement parsing (ex: if (x) {a;})
+checkStatements :: Spec
+checkStatements = describe "tests for statements" $ do
+    it "parses a simple assignment expression" $
+        parse (pStatement <* eof) "" "a = 2;" `shouldParse` (ExprT (Assign (Var "a") (IntT 2)))
+    it "parses a return statement" $ 
+        parse (pStatement <* eof) "" "return 4 * 3;" `shouldParse` (Return (Mul (IntT 4) (IntT 3)))
+    it "parses a goto statement" $ 
+        parse (pStatement <* eof) "" "goto L2;" `shouldParse` (Goto "L2")
+    it "parses a label declaration" $
+        parse (pStatement <* eof) "" "L2:" `shouldParse` (LabelDec "L2")
+    it "parses a ternary, not a label" $
+        parse (pStatement <* eof) "" "a?b:c;" `shouldParse` (ExprT (TernIf (Var "a") (Var "b") (Var "c"))) 
+
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do
     checkExprs
     checkConstExprEval
+    checkStatements
