@@ -234,18 +234,20 @@ data Statement
     deriving (Eq, Ord, Show)
 
 pStatement :: Parser Statement
-pStatement = -- pAuto <|>
-             -- pExtern <|>
-             -- pCase <|>
-             -- pCompound <|>
-             -- (try pIfElse) <|>
-             -- pIf <|>
-             -- pWhile <|>
-             -- pSwitch <|>
-             pGoto <|>
-             pReturn <|>
-             (try pExprT) <|>
-             pLabelDec -- parses last since it overlaps with expression
+pStatement = choice 
+             -- pAuto
+             -- , pExtern
+             -- , pCase
+             -- , pCompound
+             -- , (try pIfElse)
+             -- , pIf
+             -- , pWhile
+             -- , pSwitch
+             [ pGoto
+             , pReturn
+             , (try pExprT)
+             , pLabelDec -- parses last since it overlaps with expression
+             ]
 
 pAuto :: Parser Statement
 pAuto = undefined
