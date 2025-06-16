@@ -354,9 +354,9 @@ data Definition
 
 pDef :: Parser Definition
 pDef = choice 
-       [ pFunc
-       -- , try (pGlobalVec)
-       -- , pGlobal
+       [ try pFunc
+       , try pGlobalVec
+       , pGlobal
        ]
 
 pFunc :: Parser Definition
@@ -365,3 +365,27 @@ pFunc = do
     args <- parens $ pName `sepBy` (symbol ",")
     statement <- pStatement
     return $ Func name args statement
+
+pGlobalVec :: Parser Definition
+pGlobalVec = do
+    name <- pName
+    _ <- symbol "["
+    size <- optional pExpr
+    _ <- symbol "]"
+    init_vals <- optional pInitVals
+    _ <- symbol ";"
+    return $ GlobalVec name size init_vals
+
+pInitVals :: Parser [Expr]
+pInitVals = do
+    _ <- symbol "{"
+    exprs <- pExpr `sepBy` (symbol ",")
+    _ <- symbol "}"
+    return exprs
+
+pGlobal :: Parser Definition
+pGlobal = do
+    name <- pName
+    expr <- optional pExpr
+    _ <- symbol ";"
+    return $ Global name expr

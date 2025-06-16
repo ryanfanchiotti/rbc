@@ -106,6 +106,13 @@ checkDefs = describe "tests for definitions" $ do
         (Func ("func") (["test", "aaa", "b"]) (Compound
             [ExprT (Assign (Var "z") (IntT 4)), ExprT (FunCall ([Var "aaa"]) (Var "printf"))]
         ))
+    it "parses a vector definition with an initialization list" $
+        parse (pDef <* eof) "" "vec[3] {1, 2, 3};" `shouldParse`
+        (GlobalVec "vec" (Just (IntT 3)) (Just ([IntT 1, IntT 2, IntT 3])))
+    it "parses a global def with a value" $ 
+        parse (pDef <* eof) "" "glob 1;" `shouldParse` (Global "glob" (Just (IntT 1)))
+    it "parses a global def without a value" $ 
+        parse (pDef <* eof) "" "glob;" `shouldParse` (Global "glob" Nothing)
 
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do
