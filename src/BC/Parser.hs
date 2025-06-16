@@ -107,6 +107,9 @@ pString = StringT <$> lexeme (between (symbol "\"") (symbol "\"") contents)
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+brackets :: Parser a -> Parser a
+brackets = between (symbol "[") (symbol "]")
+
 pTerm :: Parser Expr
 pTerm = choice
     [ parens pExpr
@@ -170,7 +173,7 @@ ternary = TernR ((TernIf <$ symbol ":") <$ symbol "?")
 
 -- Vector indexing, gets the expr between brackets
 vecIdx :: Operator Parser Expr
-vecIdx = Postfix (VecIdx <$> between (symbol "[") (symbol "]") pExpr)
+vecIdx = Postfix (VecIdx <$> brackets pExpr)
 
 -- Function calls, gets the comma separated argument expr list between parens
 funCall :: Operator Parser Expr
@@ -219,7 +222,7 @@ binConstExpr f a b = do
 data Statement
     = Auto [(String, Maybe Expr)]
     | Extern [String]
-    | LabelDec String -- L2:
+    | LabelDec String -- ex: L2:
     -- Note that case isn't chained to another statement on purpose because switches without compound statements are usually not intended 
     -- This should also always have a const-expr according to the spec
     | Case Expr 
@@ -229,31 +232,45 @@ data Statement
     | While Expr Statement
     | Switch Expr Statement
     | Goto String
-    | Return Expr
+    | Return (Maybe Expr)
     | ExprT Expr
     deriving (Eq, Ord, Show)
 
 pStatement :: Parser Statement
 pStatement = choice 
-             -- pAuto
-             -- , pExtern
-             -- , pCase
-             -- , pCompound
-             -- , (try pIfElse)
-             -- , pIf
-             -- , pWhile
-             -- , pSwitch
-             [ pGoto
+             [ pAuto
+             , pExtern
+             , pCase
+             , pCompound
+             , (try pIfElse)
+             , pIf
+             , pWhile
+             , pSwitch
+             , pGoto
              , pReturn
              , (try pExprT)
              , pLabelDec -- parses last since it overlaps with expression
              ]
 
 pAuto :: Parser Statement
-pAuto = undefined
+pAuto = do
+    _ <- symbol "auto"
+    decls <- pAutoDecl `sepBy1` (symbol ",")
+    _ <- symbol ";"
+    return $ Auto decls
+
+pAutoDecl :: Parser (String, Maybe Expr)
+pAutoDecl = do
+    name <- pName
+    size <- optional $ brackets pExpr
+    return (name, size)
 
 pExtern :: Parser Statement
-pExtern = undefined
+pExtern = do
+    _ <- symbol "extern"
+    names <- pName `sepBy1` (symbol ",")
+    _ <- symbol ";"
+    return $ Extern names
 
 pLabelDec :: Parser Statement
 pLabelDec = do
@@ -262,34 +279,61 @@ pLabelDec = do
     return $ LabelDec label_name
 
 pCase :: Parser Statement
-pCase = undefined
+pCase = do
+    _ <- symbol "case"
+    expr <- pExpr
+    _ <- symbol ":"
+    return $ Case expr
 
 pCompound :: Parser Statement
-pCompound = undefined
+pCompound = do
+    _ <- symbol "{"
+    statements <- many pStatement
+    _ <- symbol "}"
+    return $ Compound statements
 
 pIf :: Parser Statement
-pIf = undefined
+pIf = do
+    _ <- symbol "if"
+    expr <- parens pExpr
+    statement <- pStatement
+    return $ If expr statement
 
 pIfElse :: Parser Statement
-pIfElse = undefined
+pIfElse = do
+    _ <- symbol "if"
+    expr <- parens pExpr
+    true_statement <- pStatement
+    _ <- symbol "else"
+    false_statement <- pStatement
+    return $ IfElse expr true_statement false_statement
 
 pWhile :: Parser Statement
-pWhile = undefined
+pWhile = do
+    _ <- symbol "while"
+    expr <- parens pExpr
+    statement <- pStatement
+    return $ While expr statement
 
+-- Note: parens around the expression are added here for regularity
 pSwitch :: Parser Statement
-pSwitch = undefined
+pSwitch = do
+    _ <- symbol "switch"
+    expr <- parens pExpr
+    statement <- pStatement
+    return $ Switch expr statement
 
 pGoto :: Parser Statement
 pGoto = do
-    _ <- lexeme $ string "goto"
+    _ <- symbol "goto"
     label_name <- pName
     _ <- symbol ";"
     return $ Goto label_name
 
 pReturn :: Parser Statement
 pReturn = do
-    _ <- lexeme $ string "return"
-    expr <- pExpr
+    _ <- symbol "return"
+    expr <- optional pExpr
     _ <- symbol ";"
     return $ Return expr
 

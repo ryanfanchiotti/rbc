@@ -68,13 +68,35 @@ checkStatements = describe "tests for statements" $ do
     it "parses a simple assignment expression" $
         parse (pStatement <* eof) "" "a = 2;" `shouldParse` (ExprT (Assign (Var "a") (IntT 2)))
     it "parses a return statement" $ 
-        parse (pStatement <* eof) "" "return 4 * 3;" `shouldParse` (Return (Mul (IntT 4) (IntT 3)))
+        parse (pStatement <* eof) "" "return 4 * 3;" `shouldParse` (Return (Just (Mul (IntT 4) (IntT 3))))
     it "parses a goto statement" $ 
         parse (pStatement <* eof) "" "goto L2;" `shouldParse` (Goto "L2")
     it "parses a label declaration" $
         parse (pStatement <* eof) "" "L2:" `shouldParse` (LabelDec "L2")
     it "parses a ternary, not a label" $
-        parse (pStatement <* eof) "" "a?b:c;" `shouldParse` (ExprT (TernIf (Var "a") (Var "b") (Var "c"))) 
+        parse (pStatement <* eof) "" "a?b:c;" `shouldParse` (ExprT (TernIf (Var "a") (Var "b") (Var "c")))
+    it "parses a simple compound statement" $
+        parse (pStatement <* eof) "" "{L2: a; goto L2;}" `shouldParse` (Compound [LabelDec "L2", ExprT (Var "a"), Goto "L2"])
+    it "parses an extern declaration list" $
+        parse (pStatement <* eof) "" "extern a, b, c;" `shouldParse` (Extern ["a", "b", "c"])
+    it "doesn't parse an empty extern declaration list" $
+        parse (pStatement <* eof) "" `shouldFailOn` "extern;"
+    it "parses a case statement" $ 
+        parse (pStatement <* eof) "" "case 3:" `shouldParse` (Case (IntT 3))
+    it "parses a switch statement with cases" $
+        parse (pStatement <* eof) "" "switch (3) {case 1: a = 4; case 3: a = 5;}" `shouldParse`
+        (Switch (IntT 3) (Compound [Case (IntT 1), ExprT (Assign (Var "a") (IntT 4)), Case (IntT 3), ExprT (Assign (Var "a") (IntT 5))]))
+    it "parses an if else statement" $
+        parse (pStatement <* eof) "" "if (3 > 2) return 1; else return 2;" `shouldParse`
+        (IfElse (Gt (IntT 3) (IntT 2)) (Return (Just (IntT 1))) (Return (Just (IntT 2))))
+    it "parses a regular if statement" $
+        parse (pStatement <* eof) "" "if (1 & 2) {a += 1; return 4;}" `shouldParse`
+        (If (BitAnd (IntT 1) (IntT 2)) (Compound [ExprT (AssignAdd (Var "a") (IntT 1)), Return (Just (IntT 4))]))
+    it "parses a while loop" $ 
+        parse (pStatement <* eof) "" "while (a) a -= 1;" `shouldParse` (While (Var "a") (ExprT (AssignSub (Var "a") (IntT 1))))
+    it "parses an auto declaration" $
+        parse (pStatement <* eof) "" "auto a, b[23], c;" `shouldParse` 
+        (Auto [("a", Nothing), ("b", Just (IntT 23)), ("c", Nothing)])
 
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do
