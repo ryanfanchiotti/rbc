@@ -98,8 +98,18 @@ checkStatements = describe "tests for statements" $ do
         parse (pStatement <* eof) "" "auto a, b[23], c;" `shouldParse` 
         (Auto [("a", Nothing), ("b", Just (IntT 23)), ("c", Nothing)])
 
+-- Tests for definition parsing (functions and globals)
+checkDefs :: Spec
+checkDefs = describe "tests for definitions" $ do
+    it "parses a simple function definition" $
+        parse (pDef <* eof) "" "func(test, aaa, b) {z = 4; printf(aaa);}" `shouldParse`
+        (Func ("func") (["test", "aaa", "b"]) (Compound
+            [ExprT (Assign (Var "z") (IntT 4)), ExprT (FunCall ([Var "aaa"]) (Var "printf"))]
+        ))
+
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do
     checkExprs
     checkConstExprEval
     checkStatements
+    checkDefs

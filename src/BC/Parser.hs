@@ -3,7 +3,9 @@ module BC.Parser (
     pExpr,
     evalConstExpr,
     Statement(..),
-    pStatement
+    pStatement,
+    Definition(..),
+    pDef
 ) where
 
 import Control.Monad.Combinators.Expr
@@ -343,3 +345,23 @@ pExprT = ExprT <$> (pExpr <* (symbol ";"))
 pName :: Parser String
 pName = lexeme
   ((:) <$> letterChar <*> many alphaNumChar <?> "name (alpha numeric, starting with letter)")
+
+data Definition
+    = Func String [String] Statement -- Function def: name, args, statement
+    | Global String (Maybe Expr) -- Name, init-val
+    | GlobalVec String (Maybe Expr) (Maybe [Expr]) -- Name, size, init-list
+    deriving (Eq, Show, Ord)
+
+pDef :: Parser Definition
+pDef = choice 
+       [ pFunc
+       -- , try (pGlobalVec)
+       -- , pGlobal
+       ]
+
+pFunc :: Parser Definition
+pFunc = do
+    name <- pName
+    args <- parens $ pName `sepBy` (symbol ",")
+    statement <- pStatement
+    return $ Func name args statement
