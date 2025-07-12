@@ -43,8 +43,8 @@ data Expr
     | ShiftR Expr Expr
 
     | TernIf Expr Expr Expr -- ^ If expr 1 evaluates to true, then expr 2, else expr 3
-    | VecIdx Expr Expr -- ^ Index expr, name of vector variable
-    | FunCall [Expr] Expr -- ^ Arg exprs, name of function variable
+    | VecIdx Expr Expr -- ^ Index expr, name of vector variable (or address to dereference, etc)
+    | FunCall [Expr] Expr -- ^ Arg exprs, name of function variable (or function pointer)
 
     -- Assignment primitive operations
     | Assign Expr Expr

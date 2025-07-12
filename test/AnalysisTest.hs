@@ -7,6 +7,7 @@ import Test.Hspec
 analysisSpec :: Spec
 analysisSpec = describe "tests for analysis" $ do
     checkConstExprEval
+    checkIsLValue
 
 -- Tests for constant expression evaluation
 checkConstExprEval :: Spec
@@ -21,3 +22,18 @@ checkConstExprEval = describe "tests for constant expression evaluation" $ do
         evalConstExpr (Eq (BitOr (IntT 7) (IntT 8)) (IntT 15)) == (Just 1)
     it "evaluates logical not" $
         evalConstExpr (Not (Add (IntT 8) (IntT 34))) == (Just 0)
+
+checkIsLValue :: Spec
+checkIsLValue = describe "tests for lvalue checks" $ do
+    it "determines that var is an lval" $
+        isLValue varExpr == Right varExpr
+    it "determines that deref is an lval" $
+        isLValue derefExpr == Right derefExpr
+    it "determines that vector indexing is an lval" $
+        isLValue idxExpr == Right idxExpr
+    it "throws an error on an int" $
+        isLValue (IntT 42) == Left "assignment can only be done to vars, derefs, or indexed vecs"
+    where
+        varExpr = (Var "a")
+        derefExpr = (Deref (Div (IntT 2) (IntT 2)))
+        idxExpr = (VecIdx (Var "a") (IntT 21))

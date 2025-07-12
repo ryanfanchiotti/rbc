@@ -1,9 +1,12 @@
 module BC.Analysis (
-    evalConstExpr
+    evalConstExpr,
+    isLValue
 ) where
 
 import BC.Syntax
 import Data.Bits
+
+type Error = String
 
 -- Check if an expression is a compile time constant and evaluate it (constant folding)
 -- According to the spec, this means
@@ -41,3 +44,14 @@ binConstExpr f a b = do
     aVal <- evalConstExpr a
     bVal <- evalConstExpr b
     return $ f aVal bVal
+
+-- Can we assign to this expr?
+isLValue :: Expr -> Either Error Expr
+isLValue e@(Var _) = Right e
+isLValue e@(Deref _) = Right e
+isLValue e@(VecIdx _ _) = Right e
+isLValue _ = Left "assignment can only be done to vars, derefs, or indexed vecs"
+
+-- Are this Expr and the nested Exprs inside of it valid?
+checkExpr :: Expr -> Either Error Expr
+checkExpr = undefined
