@@ -7,6 +7,7 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import BC.Parser
+import BC.Syntax
 
 -- Parsing tests for Expr (which roughly corresponds to an RValue)
 checkExprs :: Spec
