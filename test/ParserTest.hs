@@ -9,9 +9,8 @@ import Text.Megaparsec.Char
 import BC.Parser
 import BC.Syntax
 
--- Parsing tests for Expr (which roughly corresponds to an RValue)
 checkExprs :: Spec
-checkExprs = describe "tests for expressions" $ do
+checkExprs = describe "tests for exprs (which roughly correspond to an rvalue)" $ do
     it "parses simple int" $
         parse (pExpr <* eof) "" "1" `shouldParse` (IntT 1)
     it "parses addition" $
@@ -49,9 +48,8 @@ checkExprs = describe "tests for expressions" $ do
     it "parses multiple unary operators in the right order" $
         parse (pExpr <* eof) "" "-!x++" `shouldParse` (Neg (Not (IncR (Var "x"))))
 
--- Tests for statement parsing (ex: if (x) {a;})
 checkStatements :: Spec
-checkStatements = describe "tests for statements" $ do
+checkStatements = describe "tests for statement parsing (ex: if (x) {a;})" $ do
     it "parses a simple assignment expression" $
         parse (pStatement <* eof) "" "a = 2;" `shouldParse` (ExprT (Assign (Var "a") (IntT 2)))
     it "parses a return statement" $
@@ -85,9 +83,8 @@ checkStatements = describe "tests for statements" $ do
         parse (pStatement <* eof) "" "auto a, b[23], c;" `shouldParse`
         (Auto [("a", Nothing), ("b", Just (IntT 23)), ("c", Nothing)])
 
--- Tests for definition parsing (functions and globals)
 checkDefs :: Spec
-checkDefs = describe "tests for definitions" $ do
+checkDefs = describe "tests for definition parsing (functions and globals)" $ do
     it "parses a simple function definition" $
         parse (pDef <* eof) "" "func(test, aaa, b) {z = 4; printf(aaa);}" `shouldParse`
         (Func ("func") (["test", "aaa", "b"]) (Compound

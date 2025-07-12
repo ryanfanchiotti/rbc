@@ -8,8 +8,8 @@ analysisSpec :: Spec
 analysisSpec = describe "tests for analysis" $ do
     checkConstExprEval
     checkIsLValue
+    checkExprAnalysis
 
--- Tests for constant expression evaluation
 checkConstExprEval :: Spec
 checkConstExprEval = describe "tests for constant expression evaluation" $ do
     it "evaluates simple addition and division" $
@@ -37,3 +37,8 @@ checkIsLValue = describe "tests for lvalue checks" $ do
         varExpr = (Var "a")
         derefExpr = (Deref (Div (IntT 2) (IntT 2)))
         idxExpr = (VecIdx (Var "a") (IntT 21))
+
+checkExprAnalysis :: Spec
+checkExprAnalysis = describe "tests for analyze expr" $ do
+    it "performs constant folding on nested expressions" $
+        analyzeExpr (Assign (Var "a") (BitOr (Add (IntT 4) (IntT 6)) (IntT 3))) == Right (Assign (Var "a") (IntT 11))
