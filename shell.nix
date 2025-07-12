@@ -2,7 +2,7 @@
 
 # Create a shell with the necessary packages to run bc
 pkgs.mkShell {
-  nativeBuildInputs = with pkgs.buildPackages; [ 
+  nativeBuildInputs = with pkgs.buildPackages; [
     cabal-install
     ghc
   ];

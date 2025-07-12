@@ -26,7 +26,7 @@ data Expr
     | IntT Int
     | FloatT Double
     | StringT String
-    
+
     -- Unary primitive operations
     | Neg Expr
     | Addr Expr
@@ -82,7 +82,7 @@ sc = L.space
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
 
-symbol :: String -> Parser String 
+symbol :: String -> Parser String
 symbol = L.symbol sc
 
 -- Parser for a variable name
@@ -146,9 +146,9 @@ operatorTable =
 -- Necessary for parsing multiple unary operations in a row
 unaryPrefixOps :: Parser (Expr -> Expr)
 unaryPrefixOps = foldr1 (.) <$> some (
-        DecL <$ symbol "--" <|> 
-        IncL <$ symbol "++" <|> 
-        Neg <$ symbol "-" <|> 
+        DecL <$ symbol "--" <|>
+        IncL <$ symbol "++" <|>
+        Neg <$ symbol "-" <|>
         Deref <$ symbol "*" <|>
         Addr <$ symbol "&" <|>
         Not <$ symbol "!"
@@ -225,9 +225,9 @@ data Statement
     = Auto [(String, Maybe Expr)]
     | Extern [String]
     | LabelDec String -- ex: L2:
-    -- Note that case isn't chained to another statement on purpose because switches without compound statements are usually not intended 
+    -- Note that case isn't chained to another statement on purpose because switches without compound statements are usually not intended
     -- This should also always have a const-expr according to the spec
-    | Case Expr 
+    | Case Expr
     | Compound [Statement] -- {a; b; c;}
     | If Expr Statement
     | IfElse Expr Statement Statement
@@ -239,7 +239,7 @@ data Statement
     deriving (Eq, Ord, Show)
 
 pStatement :: Parser Statement
-pStatement = choice 
+pStatement = choice
              [ pAuto
              , pExtern
              , pCase
@@ -353,7 +353,7 @@ data Definition
     deriving (Eq, Show, Ord)
 
 pDef :: Parser Definition
-pDef = choice 
+pDef = choice
        [ try pFunc
        , try pGlobalVec
        , pGlobal
