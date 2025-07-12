@@ -42,3 +42,5 @@ checkExprAnalysis :: Spec
 checkExprAnalysis = describe "tests for analyze expr" $ do
     it "performs constant folding on nested expressions" $
         analyzeExpr (Assign (Var "a") (BitOr (Add (IntT 4) (IntT 6)) (IntT 3))) == Right (Assign (Var "a") (IntT 11))
+    it "errors on a bad assignment" $
+        analyzeExpr (Assign (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"

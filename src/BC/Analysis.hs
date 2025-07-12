@@ -42,9 +42,9 @@ evalConstExpr _ = Nothing
 -- Binary constant expression evaluation
 binConstExpr :: (Int -> Int -> Int) -> Expr -> Expr -> Maybe Int
 binConstExpr f a b = do
-    aVal <- evalConstExpr a
-    bVal <- evalConstExpr b
-    return $ f aVal bVal
+    a_val <- evalConstExpr a
+    b_val <- evalConstExpr b
+    return $ f a_val b_val
 
 -- Can we assign to this expr?
 isLValue :: Expr -> Either Error Expr
