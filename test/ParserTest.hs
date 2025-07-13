@@ -70,7 +70,14 @@ checkStatements = describe "tests for statement parsing (ex: if (x) {a;})" $ do
         parse (pStatement <* eof) "" "case 3:" `shouldParse` (Case (IntT 3))
     it "parses a switch statement with cases" $
         parse (pStatement <* eof) "" "switch (3) {case 1: a = 4; case 3: a = 5;}" `shouldParse`
-        (Switch (IntT 3) (Compound [Case (IntT 1), ExprT (Assign (Var "a") (IntT 4)), Case (IntT 3), ExprT (Assign (Var "a") (IntT 5))]))
+        (Switch (IntT 3) 
+            (Compound 
+                [ Case (IntT 1), 
+                  ExprT (Assign (Var "a") (IntT 4)), 
+                  Case (IntT 3), 
+                  ExprT (Assign (Var "a") (IntT 5)) ]
+            )
+        )
     it "parses an if else statement" $
         parse (pStatement <* eof) "" "if (3 > 2) return 1; else return 2;" `shouldParse`
         (IfElse (Gt (IntT 3) (IntT 2)) (Return (Just (IntT 1))) (Return (Just (IntT 2))))
@@ -87,9 +94,13 @@ checkDefs :: Spec
 checkDefs = describe "tests for definition parsing (functions and globals)" $ do
     it "parses a simple function definition" $
         parse (pDef <* eof) "" "func(test, aaa, b) {z = 4; printf(aaa);}" `shouldParse`
-        (Func ("func") (["test", "aaa", "b"]) (Compound
-            [ExprT (Assign (Var "z") (IntT 4)), ExprT (FunCall ([Var "aaa"]) (Var "printf"))]
-        ))
+        (Func ("func") (["test", "aaa", "b"]) 
+            (Compound
+                [ ExprT (Assign (Var "z") (IntT 4)), 
+                  ExprT (FunCall ([Var "aaa"]) (Var "printf"))
+                ]
+            )
+        )
     it "parses a vector definition with an initialization list" $
         parse (pDef <* eof) "" "vec[3] {1, 2, 3};" `shouldParse`
         (GlobalVec "vec" (Just (IntT 3)) (Just ([IntT 1, IntT 2, IntT 3])))
