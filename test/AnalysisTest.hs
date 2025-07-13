@@ -26,21 +26,27 @@ checkConstExprEval = describe "tests for constant expression evaluation" $ do
 checkIsLValue :: Spec
 checkIsLValue = describe "tests for lvalue checks" $ do
     it "determines that var is an lval" $
-        isLValue varExpr == Right varExpr
+        isLValue var_expr == Right var_expr
     it "determines that deref is an lval" $
-        isLValue derefExpr == Right derefExpr
+        isLValue deref_expr == Right deref_expr
     it "determines that vector indexing is an lval" $
-        isLValue idxExpr == Right idxExpr
+        isLValue idx_expr == Right idx_expr
     it "throws an error on an int" $
         isLValue (IntT 42) == Left "assignment can only be done to vars, derefs, or indexed vecs"
     where
-        varExpr = (Var "a")
-        derefExpr = (Deref (Div (IntT 2) (IntT 2)))
-        idxExpr = (VecIdx (Var "a") (IntT 21))
+        var_expr = (Var "a")
+        deref_expr = (Deref (Div (IntT 2) (IntT 2)))
+        idx_expr = (VecIdx (Var "a") (IntT 21))
 
 checkExprAnalysis :: Spec
-checkExprAnalysis = describe "tests for analyze expr" $ do
+checkExprAnalysis = describe "tests for analyzing an expr" $ do
     it "performs constant folding on nested expressions" $
         analyzeExpr (Assign (Var "a") (BitOr (Add (IntT 4) (IntT 6)) (IntT 3))) == Right (Assign (Var "a") (IntT 11))
+    it "does not perform constant folding on nested expressions with floats" $
+        analyzeExpr float_expr == Right float_expr
     it "errors on a bad assignment" $
         analyzeExpr (Assign (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"
+    it "errors on a bad bitwise and plus assignment" $
+        analyzeExpr (AssignBitAnd (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"
+    where
+        float_expr = (Assign (Var "a") (Mul (Add (FloatT 4) (FloatT 6)) (FloatT 3)))
