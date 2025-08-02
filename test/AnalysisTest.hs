@@ -3,6 +3,7 @@ module AnalysisTest (analysisSpec) where
 import BC.Syntax
 import BC.Analysis
 import Test.Hspec
+import qualified Data.HashSet as S
 
 analysisSpec :: Spec
 analysisSpec = describe "tests for analysis" $ do
@@ -41,12 +42,16 @@ checkIsLValue = describe "tests for lvalue checks" $ do
 checkExprAnalysis :: Spec
 checkExprAnalysis = describe "tests for analyzing an expr" $ do
     it "performs constant folding on nested expressions" $
-        analyzeExpr (Assign (Var "a") (BitOr (Add (IntT 4) (IntT 6)) (IntT 3))) == Right (Assign (Var "a") (IntT 11))
+        analyzeExpr a_set (Assign (Var "a") (BitOr (Add (IntT 4) (IntT 6)) (IntT 3))) == Right (Assign (Var "a") (IntT 11))
     it "does not perform constant folding on nested expressions with floats" $
-        analyzeExpr float_expr == Right float_expr
+        analyzeExpr a_set float_expr == Right float_expr
     it "errors on a bad assignment" $
-        analyzeExpr (Assign (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"
+        analyzeExpr es (Assign (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"
     it "errors on a bad bitwise and plus assignment" $
-        analyzeExpr (AssignBitAnd (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"
+        analyzeExpr es (AssignBitAnd (IntT 32) (IntT 32)) == Left "assignment can only be done to vars, derefs, or indexed vecs"
+    it "errors on use before definition" $
+        analyzeExpr es (Assign (Var "z") (IntT 64)) == Left "z used before definition"
     where
         float_expr = (Assign (Var "a") (Mul (Add (FloatT 4) (FloatT 6)) (FloatT 3)))
+        es = S.empty
+        a_set = S.fromList ["a"]

@@ -6,8 +6,10 @@ module BC.Analysis (
 
 import BC.Syntax
 import Data.Bits
+import qualified Data.HashSet as S
 
 type Error = String
+type DefinedVars = S.HashSet String
 
 -- Check if an expression is a compile time constant and evaluate it (constant folding)
 -- According to the spec, this means
@@ -55,63 +57,64 @@ isLValue _ = Left $ "assignment can only be done to vars, derefs, or indexed vec
 
 -- Are this Expr and the nested Exprs inside of it valid?
 -- Perform constant folding where possible
-analyzeExpr :: Expr -> Either Error Expr
-analyzeExpr e | (Just const_int) <- evalConstExpr e = Right (IntT const_int)
-analyzeExpr e@(Var _) = Right e
-analyzeExpr e@(IntT _) = Right e
-analyzeExpr e@(FloatT _) = Right e
-analyzeExpr e@(StringT _) = Right e
-analyzeExpr (Neg e) = analyzeExpr e
-analyzeExpr (Addr e) = analyzeExpr e
-analyzeExpr (Deref e) = analyzeExpr e
-analyzeExpr (IncL e) = analyzeExpr e
-analyzeExpr (IncR e) = analyzeExpr e
-analyzeExpr (DecL e) = analyzeExpr e
-analyzeExpr (DecR e) = analyzeExpr e
-analyzeExpr (Not e) = analyzeExpr e
-analyzeExpr (Add a b) = analyzeBinExpr Add a b
-analyzeExpr (Sub a b) = analyzeBinExpr Sub a b
-analyzeExpr (Mul a b) = analyzeBinExpr Mul a b
-analyzeExpr (Div a b) = analyzeBinExpr Div a b
-analyzeExpr (Mod a b) = analyzeBinExpr Mod a b
-analyzeExpr (Gt a b) = analyzeBinExpr Gt a b
-analyzeExpr (Ge a b) = analyzeBinExpr Ge a b
-analyzeExpr (Lt a b) = analyzeBinExpr Lt a b
-analyzeExpr (Le a b) = analyzeBinExpr Le a b
-analyzeExpr (Eq a b) = analyzeBinExpr Eq a b
-analyzeExpr (NotEq a b) = analyzeBinExpr NotEq a b
-analyzeExpr (BitOr a b) = analyzeBinExpr BitOr a b
-analyzeExpr (BitAnd a b) = analyzeBinExpr BitAnd a b
-analyzeExpr (ShiftL a b) = analyzeBinExpr ShiftL a b
-analyzeExpr (ShiftR a b) = analyzeBinExpr ShiftR a b
-analyzeExpr (VecIdx a b) = analyzeBinExpr VecIdx a b
-analyzeExpr (TernIf a b c) = do
-        aexpr <- analyzeExpr a
-        bexpr <- analyzeExpr b
-        cexpr <- analyzeExpr c
+analyzeExpr :: DefinedVars -> Expr -> Either Error Expr
+analyzeExpr dv e 
+    | (Just const_int) <- evalConstExpr e = Right (IntT const_int)
+    | (Var name) <- e = if S.member name dv then Right e else Left $ name ++ " used before definition"
+    | (IntT _) <- e = Right e
+    | (FloatT _) <- e = Right e
+    | (StringT _) <- e = Right e
+    | (Neg ne) <- e = analyzeExpr dv ne
+    | (Addr ne) <- e = analyzeExpr dv ne
+    | (Deref ne) <- e = analyzeExpr dv ne
+    | (IncL ne) <- e = analyzeExpr dv ne
+    | (IncR ne) <- e = analyzeExpr dv ne
+    | (DecL ne) <- e = analyzeExpr dv ne
+    | (DecR ne) <- e = analyzeExpr dv ne
+    | (Not ne) <- e = analyzeExpr dv ne
+    | (Add a b) <- e = analyzeBinExpr dv Add a b
+    | (Sub a b) <- e = analyzeBinExpr dv Sub a b
+    | (Mul a b) <- e = analyzeBinExpr dv Mul a b
+    | (Div a b) <- e = analyzeBinExpr dv Div a b
+    | (Mod a b) <- e = analyzeBinExpr dv Mod a b
+    | (Gt a b) <- e = analyzeBinExpr dv Gt a b
+    | (Ge a b) <- e = analyzeBinExpr dv Ge a b
+    | (Lt a b) <- e = analyzeBinExpr dv Lt a b
+    | (Le a b) <- e = analyzeBinExpr dv Le a b
+    | (Eq a b) <- e = analyzeBinExpr dv Eq a b
+    | (NotEq a b) <- e = analyzeBinExpr dv NotEq a b
+    | (BitOr a b) <- e = analyzeBinExpr dv BitOr a b
+    | (BitAnd a b) <- e = analyzeBinExpr dv BitAnd a b
+    | (ShiftL a b) <- e = analyzeBinExpr dv ShiftL a b
+    | (ShiftR a b) <- e = analyzeBinExpr dv ShiftR a b
+    | (VecIdx a b) <- e = analyzeBinExpr dv VecIdx a b
+    | (TernIf a b c) <- e = do
+        aexpr <- analyzeExpr dv a
+        bexpr <- analyzeExpr dv b
+        cexpr <- analyzeExpr dv c
         return $ TernIf aexpr bexpr cexpr
-analyzeExpr (FunCall a b) = do
-        aexprseq <- mapM analyzeExpr a
-        bexpr <- analyzeExpr b
+    | (FunCall a b) <- e = do
+        aexprseq <- mapM (analyzeExpr dv) a
+        bexpr <- analyzeExpr dv b
         return $ FunCall aexprseq bexpr
-analyzeExpr (Assign a b) = analyzeAssignExpr Assign a b
-analyzeExpr (AssignAdd a b) = analyzeAssignExpr AssignAdd a b
-analyzeExpr (AssignSub a b) = analyzeAssignExpr AssignSub a b
-analyzeExpr (AssignMul a b) = analyzeAssignExpr AssignMul a b
-analyzeExpr (AssignDiv a b) = analyzeAssignExpr AssignDiv a b
-analyzeExpr (AssignMod a b) = analyzeAssignExpr AssignMod a b
-analyzeExpr (AssignBitOr a b) = analyzeAssignExpr AssignBitOr a b
-analyzeExpr (AssignBitAnd a b) = analyzeAssignExpr AssignBitAnd a b
-analyzeExpr (AssignShiftL a b) = analyzeAssignExpr AssignShiftL a b
-analyzeExpr (AssignShiftR a b) = analyzeAssignExpr AssignShiftR a b
+    | (Assign a b) <- e = analyzeAssignExpr dv Assign a b
+    | (AssignAdd a b) <- e = analyzeAssignExpr dv AssignAdd a b
+    | (AssignSub a b) <- e = analyzeAssignExpr dv AssignSub a b
+    | (AssignMul a b) <- e = analyzeAssignExpr dv AssignMul a b
+    | (AssignDiv a b) <- e = analyzeAssignExpr dv AssignDiv a b
+    | (AssignMod a b) <- e = analyzeAssignExpr dv AssignMod a b
+    | (AssignBitOr a b) <- e = analyzeAssignExpr dv AssignBitOr a b
+    | (AssignBitAnd a b) <- e = analyzeAssignExpr dv AssignBitAnd a b
+    | (AssignShiftL a b) <- e = analyzeAssignExpr dv AssignShiftL a b
+    | (AssignShiftR a b) <- e = analyzeAssignExpr dv AssignShiftL a b
 
-analyzeBinExpr :: (Expr -> Expr -> Expr) -> Expr -> Expr -> Either Error Expr
-analyzeBinExpr dcon a b = do
-    aexpr <- analyzeExpr a
-    bexpr <- analyzeExpr b
+analyzeBinExpr :: DefinedVars -> (Expr -> Expr -> Expr) -> Expr -> Expr -> Either Error Expr
+analyzeBinExpr dv dcon a b = do
+    aexpr <- analyzeExpr dv a
+    bexpr <- analyzeExpr dv b
     return $ dcon aexpr bexpr
 
-analyzeAssignExpr :: (Expr -> Expr -> Expr) -> Expr -> Expr -> Either Error Expr
-analyzeAssignExpr dcon a b = do
+analyzeAssignExpr :: DefinedVars -> (Expr -> Expr -> Expr) -> Expr -> Expr -> Either Error Expr
+analyzeAssignExpr dv dcon a b = do
     _ <- isLValue a
-    analyzeBinExpr dcon a b
+    analyzeBinExpr dv dcon a b
