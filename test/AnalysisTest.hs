@@ -10,6 +10,7 @@ analysisSpec = describe "tests for analysis" $ do
     checkConstExprEval
     checkIsLValue
     checkExprAnalysis
+    checkStatementAnalysis
 
 checkConstExprEval :: Spec
 checkConstExprEval = describe "tests for constant expression evaluation" $ do
@@ -55,3 +56,24 @@ checkExprAnalysis = describe "tests for analyzing an expr" $ do
         float_expr = (Assign (Var "a") (Mul (Add (FloatT 4) (FloatT 6)) (FloatT 3)))
         es = S.empty
         a_set = S.fromList ["a"]
+
+checkStatementAnalysis :: Spec
+checkStatementAnalysis = describe "tests for analyzing a statement" $ do
+    it "adds auto names to def vars" $
+        analyzeStatement (es, auto_st, es, es) OtherS == 
+            Right (S.fromList ["a", "b", "c"], end_auto_st, es, es)
+    it "adds extern names to def vars" $
+        analyzeStatement (es, (Extern num_lst), es, es) SwitchS == 
+            Right (S.fromList num_lst, Extern num_lst, es, es)
+    it "adds label name to label list" $
+        analyzeStatement (es, (LabelDec "hello"), es, es) OtherS == 
+            Right (es, LabelDec "hello", S.fromList ["hello"], es)
+    it "adds goto name to goto list" $
+        analyzeStatement (es, (Goto "hello"), es, es) OtherS == 
+            Right (es, Goto "hello", es, S.fromList ["hello"])
+    where
+        auto_st = Auto [("a", Nothing), ("b", Just (Add (IntT 23) (IntT 23))), ("c", Nothing)]
+        end_auto_st = Auto [("a", Nothing), ("b", Just (IntT 46)), ("c", Nothing)]
+
+        num_lst = ["1", "22", "333", "4444"]
+        es = S.empty

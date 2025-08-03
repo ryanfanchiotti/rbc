@@ -1,7 +1,9 @@
 module BC.Analysis (
     evalConstExpr,
     isLValue,
-    analyzeExpr
+    analyzeExpr,
+    analyzeStatement,
+    ParentS(..)
 ) where
 
 import BC.Syntax
@@ -120,20 +122,38 @@ analyzeAssignExpr dv dcon a b = do
     analyzeBinExpr dv dcon a b
 
 -- Parent scope, needed for case placement checking
-data ParentS = CaseS | OtherS
+data ParentS = SwitchS | OtherS
 
-analyzeStatement :: DefinedVars -> ParentS -> Statement -> Either Error (DefinedVars, Statement)
-analyzeStatement dv ps s
-    | (Auto lst) <- s = undefined
-    | (Extern _) <- s = undefined
-    | (LabelDec vn) <- s = undefined
+-- Info needed to determine if we are going to a nonexistent label
+type Labels = S.HashSet String
+type Gotos = S.HashSet String
+
+type StatementInfo = (DefinedVars, Statement, Labels, Gotos)
+
+-- Analyze and perform simple optimizations on a Statement
+analyzeStatement :: StatementInfo -> ParentS -> Either Error StatementInfo
+analyzeStatement si ps
+    | (Auto lst) <- s = do
+        exprs <- mapM (autoExpr dv) lst
+        let name_strs = map fst lst
+        let names = S.fromList name_strs
+        let new_stmt = Auto $ zip name_strs exprs
+        return (S.union dv names, new_stmt, labels, gotos)
+    | (Extern vns) <- s = Right (S.union (S.fromList vns) dv, s, labels, gotos)
+    | (LabelDec vn) <- s = Right (dv, s, S.insert vn labels, gotos)
     | (Case e) <- s = undefined
     | (Compound statements) <- s = undefined
     | (If e statements) <- s = undefined
     | (IfElse e f_statements s_statements) <- s = undefined
     | (While e statements) <- s = undefined
     | (Switch e statements) <- s = undefined
-    | (Goto vn) <- s = undefined
+    | (Goto vn) <- s = Right (dv, s, labels, S.insert vn gotos)
     | (Return (Just e)) <- s = undefined
     | (Return _) <- s = undefined
     | (ExprT e) <- s = undefined
+    where
+        (dv, s, labels, gotos) = si
+        autoExpr _ (_, Nothing) = Right Nothing
+        autoExpr defvars (_, Just expr) = do
+            new_expr <- analyzeExpr defvars expr
+            return (Just new_expr)
