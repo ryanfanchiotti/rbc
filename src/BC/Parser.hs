@@ -10,6 +10,7 @@ import Text.Megaparsec.Char
 import Data.Void (Void)
 import qualified Text.Megaparsec.Char.Lexer as L
 import BC.Syntax
+import qualified Data.Char as DC
 
 type Parser = Parsec Void String
 
@@ -33,6 +34,9 @@ pVariable = Var <$> pName
 -- Parsers for number types
 pInteger :: Parser Expr
 pInteger = IntT <$> lexeme L.decimal
+
+pChar :: Parser Expr
+pChar = IntT . DC.ord <$> lexeme (between (symbol "\'") (symbol "\'") asciiChar)
 
 pOctal :: Parser Expr
 pOctal = IntT <$> lexeme (char '0' >> L.octal)
@@ -59,6 +63,7 @@ pTerm = choice
     , pVariable
     , try pFloat
     , pOctal
+    , pChar
     , pInteger
     , pString
     ]

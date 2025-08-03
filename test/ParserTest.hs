@@ -13,6 +13,8 @@ checkExprs :: Spec
 checkExprs = describe "tests for exprs (which roughly correspond to an rvalue)" $ do
     it "parses simple int" $
         parse (pExpr <* eof) "" "1" `shouldParse` (IntT 1)
+    it "parses a character as an int" $
+        parse (pExpr <* eof) "" "'a'" `shouldParse` (IntT 97)
     it "parses addition" $
         parse (pExpr <* eof) "" "a + 1" `shouldParse` (Add (Var "a") (IntT 1))
     it "parses function calls" $

@@ -142,14 +142,14 @@ analyzeStatement si ps
     | (Extern vns) <- s = Right (S.union (S.fromList vns) dv, s, labels, gotos)
     | (LabelDec vn) <- s = Right (dv, s, S.insert vn labels, gotos)
     | (Case e) <- s = undefined
-    | (Compound statements) <- s = undefined
-    | (If e statements) <- s = undefined
-    | (IfElse e f_statements s_statements) <- s = undefined
-    | (While e statements) <- s = undefined
-    | (Switch e statements) <- s = undefined
+    | (Compound stmts) <- s = undefined
+    | (If e stmt) <- s = undefined
+    | (IfElse e f_stmt s_stmt) <- s = undefined
+    | (While e stmt) <- s = undefined
+    | (Switch e stmt) <- s = undefined
     | (Goto vn) <- s = Right (dv, s, labels, S.insert vn gotos)
     | (Return (Just e)) <- s = undefined
-    | (Return _) <- s = undefined
+    | (Return _) <- s = Right si
     | (ExprT e) <- s = undefined
     where
         (dv, s, labels, gotos) = si

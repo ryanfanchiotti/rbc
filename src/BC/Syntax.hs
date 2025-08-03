@@ -68,7 +68,7 @@ data Statement
     = Auto [(VarName, Maybe Expr)]
     | Extern [VarName]
     | LabelDec VarName -- ex: L2:
-    -- Note that case isn't chained to another statement on purpose because switches without compound statements are usually not intended
+    -- Note that case isn't chained to another statement on purpose because switches not within compound statements are usually not intended
     -- This should also always have a const-expr according to the spec
     | Case Expr
     | Compound [Statement] -- {a; b; c;}
