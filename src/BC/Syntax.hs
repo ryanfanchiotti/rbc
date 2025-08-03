@@ -86,4 +86,4 @@ data Definition
     = Func VarName [VarName] Statement -- Function def: name, args, statement
     | Global VarName (Maybe Expr) -- Name, init-val
     | GlobalVec VarName (Maybe Expr) (Maybe [Expr]) -- Name, size, init-list
-    deriving (Eq, Show, Ord)
+    deriving (Eq, Ord, Show)

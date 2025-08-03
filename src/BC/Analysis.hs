@@ -118,3 +118,22 @@ analyzeAssignExpr :: DefinedVars -> (Expr -> Expr -> Expr) -> Expr -> Expr -> Ei
 analyzeAssignExpr dv dcon a b = do
     _ <- isLValue a
     analyzeBinExpr dv dcon a b
+
+-- Parent scope, needed for case placement checking
+data ParentS = CaseS | OtherS
+
+analyzeStatement :: DefinedVars -> ParentS -> Statement -> Either Error (DefinedVars, Statement)
+analyzeStatement dv ps s
+    | (Auto lst) <- s = undefined
+    | (Extern _) <- s = undefined
+    | (LabelDec vn) <- s = undefined
+    | (Case e) <- s = undefined
+    | (Compound statements) <- s = undefined
+    | (If e statements) <- s = undefined
+    | (IfElse e f_statements s_statements) <- s = undefined
+    | (While e statements) <- s = undefined
+    | (Switch e statements) <- s = undefined
+    | (Goto vn) <- s = undefined
+    | (Return (Just e)) <- s = undefined
+    | (Return _) <- s = undefined
+    | (ExprT e) <- s = undefined
