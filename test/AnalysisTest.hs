@@ -71,9 +71,36 @@ checkStatementAnalysis = describe "tests for analyzing a statement" $ do
     it "adds goto name to goto list" $
         analyzeStatement (es, (Goto "hello"), es, es) OtherS == 
             Right (es, Goto "hello", es, S.fromList ["hello"])
+    it "errors on case with non const expr" $
+        analyzeStatement (es, (Case (StringT "hello")), es, es) SwitchS ==
+            Left "case expr is not constant"
+    it "deals with compound statements correctly" $
+        analyzeStatement (S.fromList ["a"], cmpd, es, es) SwitchS ==
+            Right (S.fromList ["a"], cmpd_after, S.fromList ["heaven"], es)
     where
         auto_st = Auto [("a", Nothing), ("b", Just (Add (IntT 23) (IntT 23))), ("c", Nothing)]
         end_auto_st = Auto [("a", Nothing), ("b", Just (IntT 46)), ("c", Nothing)]
 
         num_lst = ["1", "22", "333", "4444"]
         es = S.empty
+
+        cmpd = (Compound 
+                [ Case (Add (IntT 1) (IntT 3)), 
+                  ExprT (Assign (Var "a") (IntT 4)), 
+                  Case (IntT 3), 
+                  ExprT (Assign (Var "a") (IntT 5)),
+                  LabelDec "heaven",
+                  Auto [("hello", Nothing)],
+                  Return Nothing,
+                  ExprT (Assign (Var "a") (IntT 5)) ]
+            )
+        
+        cmpd_after = (Compound 
+                [ Case (IntT 4), 
+                  ExprT (Assign (Var "a") (IntT 4)), 
+                  Case (IntT 3), 
+                  ExprT (Assign (Var "a") (IntT 5)),
+                  LabelDec "heaven",
+                  Auto [("hello", Nothing)],
+                  Return Nothing ]
+            )

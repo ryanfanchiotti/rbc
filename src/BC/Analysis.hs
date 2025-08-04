@@ -122,7 +122,7 @@ analyzeAssignExpr dv dcon a b = do
     analyzeBinExpr dv dcon a b
 
 -- Parent scope, needed for case placement checking
-data ParentS = SwitchS | OtherS
+data ParentS = SwitchS | OtherS deriving (Eq, Show, Ord)
 
 -- Info needed to determine if we are going to a nonexistent label
 type Labels = S.HashSet String
@@ -141,8 +141,15 @@ analyzeStatement si ps
         return (S.union dv names, new_stmt, labels, gotos)
     | (Extern vns) <- s = Right (S.union (S.fromList vns) dv, s, labels, gotos)
     | (LabelDec vn) <- s = Right (dv, s, S.insert vn labels, gotos)
-    | (Case e) <- s = undefined
-    | (Compound stmts) <- s = undefined
+    | (Case e) <- s, Just _ <- evalConstExpr e, ps == SwitchS = do
+        new_e <- analyzeExpr dv e
+        return (dv, Case new_e, labels, gotos)
+    | (Case _) <- s, ps /= SwitchS = Left "case expr should be under switch scope"
+    | (Case _) <- s = Left "case expr is not constant"
+    -- Compound and control flow statements should not add to defined vars for current scope
+    | (Compound stmts) <- s = do
+        (stmts', labels', gotos') <- analyzeComp si ps stmts
+        return (dv, Compound stmts', labels', gotos')
     | (If e stmt) <- s = undefined
     | (IfElse e f_stmt s_stmt) <- s = undefined
     | (While e stmt) <- s = undefined
@@ -150,10 +157,24 @@ analyzeStatement si ps
     | (Goto vn) <- s = Right (dv, s, labels, S.insert vn gotos)
     | (Return (Just e)) <- s = undefined
     | (Return _) <- s = Right si
-    | (ExprT e) <- s = undefined
+    | (ExprT e) <- s = do
+        e' <- analyzeExpr dv e
+        return (dv, ExprT e', labels, gotos)
     where
         (dv, s, labels, gotos) = si
+
         autoExpr _ (_, Nothing) = Right Nothing
         autoExpr defvars (_, Just expr) = do
             new_expr <- analyzeExpr defvars expr
             return (Just new_expr)
+
+-- Analyze a compound statement
+analyzeComp :: StatementInfo -> ParentS -> [Statement] -> Either Error ([Statement], Labels, Gotos)
+analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
+    r@(Return _) -> Right ([r], l, g)
+    _ -> do
+        (defv', st', l', g') <- analyzeStatement (defv, x, l, g) par
+        (next, l'', g'') <- analyzeComp (defv', cmpd, l', g') par xs
+        return $ (st' : next, l'', g'')
+analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
+        
