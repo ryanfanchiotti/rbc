@@ -8,6 +8,7 @@ module BC.Analysis (
 
 import BC.Syntax
 import Data.Bits
+import Data.List
 import qualified Data.HashSet as S
 
 type Error = String
@@ -138,9 +139,20 @@ analyzeStatement si ps
         let name_strs = map fst lst
         let names = S.fromList name_strs
         let new_stmt = Auto $ zip name_strs exprs
-        return (S.union dv names, new_stmt, labels, gotos)
-    | (Extern vns) <- s = Right (S.union (S.fromList vns) dv, s, labels, gotos)
-    | (LabelDec vn) <- s = Right (dv, s, S.insert vn labels, gotos)
+        let name_overlap = S.intersection names dv
+        let list_str = intercalate ", " (sort $ S.toList name_overlap)
+        if name_overlap /= S.empty
+            then Left $ "auto vars " ++ list_str ++ " already defined" 
+            else return (S.union dv names, new_stmt, labels, gotos)
+    | (Extern vns) <- s = let 
+                            name_overlap = S.intersection (S.fromList vns) dv
+                            list_str = intercalate ", " (sort $ S.toList name_overlap)
+                          in if name_overlap /= S.empty
+                                then Left $ "extern vars " ++ list_str ++ " already defined" 
+                                else Right (S.union (S.fromList vns) dv, s, labels, gotos)
+    | (LabelDec vn) <- s = if S.member vn dv
+                                then Left $ "label " ++ vn ++ " already defined"
+                                else Right (dv, s, S.insert vn labels, gotos)
     | (Case e) <- s, Just _ <- evalConstExpr e, ps == SwitchS = do
         new_e <- analyzeExpr dv e
         return (dv, Case new_e, labels, gotos)
@@ -171,10 +183,11 @@ analyzeStatement si ps
 -- Analyze a compound statement
 analyzeComp :: StatementInfo -> ParentS -> [Statement] -> Either Error ([Statement], Labels, Gotos)
 analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
+    -- Any code past Return in a compound statement is dead
     r@(Return _) -> Right ([r], l, g)
     _ -> do
         (defv', st', l', g') <- analyzeStatement (defv, x, l, g) par
         (next, l'', g'') <- analyzeComp (defv', cmpd, l', g') par xs
-        return $ (st' : next, l'', g'')
+        return (st' : next, l'', g'')
 analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
         

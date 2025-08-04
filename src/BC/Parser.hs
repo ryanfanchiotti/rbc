@@ -72,6 +72,8 @@ pExpr :: Parser Expr
 pExpr = makeExprParser pTerm operatorTable
 
 -- Mostly following C operator precedence
+-- The original B implementation reversed assignment math operators (e.g. =- instead of -=)
+-- Other implementations do not. This does not so that users who are used to C do not get confusing parse errors
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
     [ [vecIdx, funCall, postfix "--" DecR, postfix "++" IncR]

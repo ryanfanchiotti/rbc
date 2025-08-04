@@ -62,12 +62,21 @@ checkStatementAnalysis = describe "tests for analyzing a statement" $ do
     it "adds auto names to def vars" $
         analyzeStatement (es, auto_st, es, es) OtherS == 
             Right (S.fromList ["a", "b", "c"], end_auto_st, es, es)
+    it "errors on double def in auto" $
+        analyzeStatement (S.fromList ["a"], auto_st, es, es) OtherS == 
+            Left "auto vars a already defined"
     it "adds extern names to def vars" $
         analyzeStatement (es, (Extern num_lst), es, es) SwitchS == 
             Right (S.fromList num_lst, Extern num_lst, es, es)
+    it "errors on double def in extern" $
+        analyzeStatement (S.fromList num_lst, (Extern num_lst), es, es) SwitchS == 
+            Left "extern vars 1, 22, 333, 4444 already defined"
     it "adds label name to label list" $
         analyzeStatement (es, (LabelDec "hello"), es, es) OtherS == 
             Right (es, LabelDec "hello", S.fromList ["hello"], es)
+    it "errors on double def in label" $
+        analyzeStatement (S.fromList ["hello"], (LabelDec "hello"), es, es) OtherS ==
+            Left "label hello already defined"
     it "adds goto name to goto list" $
         analyzeStatement (es, (Goto "hello"), es, es) OtherS == 
             Right (es, Goto "hello", es, S.fromList ["hello"])
