@@ -86,6 +86,9 @@ checkStatementAnalysis = describe "tests for analyzing a statement" $ do
     it "deals with compound statements correctly" $
         analyzeStatement (S.fromList ["a"], cmpd, es, es) SwitchS ==
             Right (S.fromList ["a"], cmpd_after, S.fromList ["heaven"], es)
+    it "deals with switch statements correctly" $
+        analyzeStatement (es, sw, es, es) OtherS ==
+            Right (es, sw_after, es, es)
     where
         auto_st = Auto [("a", Nothing), ("b", Just (Add (IntT 23) (IntT 23))), ("c", Nothing)]
         end_auto_st = Auto [("a", Nothing), ("b", Just (IntT 46)), ("c", Nothing)]
@@ -101,8 +104,7 @@ checkStatementAnalysis = describe "tests for analyzing a statement" $ do
                   LabelDec "heaven",
                   Auto [("hello", Nothing)],
                   Return Nothing,
-                  ExprT (Assign (Var "a") (IntT 5)) ]
-            )
+                  ExprT (Assign (Var "a") (IntT 5)) ])
         
         cmpd_after = (Compound 
                 [ Case (IntT 4), 
@@ -111,5 +113,18 @@ checkStatementAnalysis = describe "tests for analyzing a statement" $ do
                   ExprT (Assign (Var "a") (IntT 5)),
                   LabelDec "heaven",
                   Auto [("hello", Nothing)],
-                  Return Nothing ]
-            )
+                  Return Nothing ])
+        
+        sw = (Switch (IntT 3) 
+            (Compound 
+                [ Case (IntT 1), 
+                Auto [("a", Nothing)], 
+                Case (Add (IntT 3) (IntT 123)), 
+                Extern ["b"] ]))
+
+        sw_after = (Switch (IntT 3) 
+                (Compound 
+                    [ Case (IntT 1), 
+                    Auto [("a", Nothing)], 
+                    Case (IntT 126), 
+                    Extern ["b"] ]))

@@ -162,12 +162,27 @@ analyzeStatement si ps
     | (Compound stmts) <- s = do
         (stmts', labels', gotos') <- analyzeComp si ps stmts
         return (dv, Compound stmts', labels', gotos')
-    | (If e stmt) <- s = undefined
-    | (IfElse e f_stmt s_stmt) <- s = undefined
-    | (While e stmt) <- s = undefined
-    | (Switch e stmt) <- s = undefined
+    | (If e stmt) <- s = do
+        e' <- analyzeExpr dv e
+        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) OtherS
+        return (dv, If e' stmt', l, g)
+    | (IfElse e f_stmt s_stmt) <- s = do
+        e' <- analyzeExpr dv e
+        (_, f_stmt', l_f, g_f) <- analyzeStatement (dv, f_stmt, labels, gotos) OtherS
+        (_, s_stmt', l_s, g_s) <- analyzeStatement (dv, s_stmt, labels, gotos) OtherS
+        return (dv, IfElse e' f_stmt' s_stmt', S.union l_f l_s, S.union g_f g_s)
+    | (While e stmt) <- s = do
+        e' <- analyzeExpr dv e
+        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) OtherS
+        return (dv, While e' stmt', l, g)
+    | (Switch e stmt) <- s = do
+        e' <- analyzeExpr dv e
+        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) SwitchS
+        return (dv, Switch e' stmt', l, g)
     | (Goto vn) <- s = Right (dv, s, labels, S.insert vn gotos)
-    | (Return (Just e)) <- s = undefined
+    | (Return (Just e)) <- s = do
+        e' <- analyzeExpr dv e
+        return (dv, Return (Just e'), labels, gotos)
     | (Return _) <- s = Right si
     | (ExprT e) <- s = do
         e' <- analyzeExpr dv e
@@ -190,4 +205,7 @@ analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
         (next, l'', g'') <- analyzeComp (defv', cmpd, l', g') par xs
         return (st' : next, l'', g'')
 analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
+
+-- Ensure AST is valid before code generation
+analyzeProg = undefined
         
