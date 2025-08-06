@@ -1,7 +1,8 @@
 module BC.Parser (
     pExpr,
     pStatement,
-    pDef
+    pDef,
+    pProg
 ) where
 
 import Control.Monad.Combinators.Expr
@@ -152,7 +153,7 @@ pAuto = do
     _ <- symbol ";"
     return $ Auto decls
 
-pAutoDecl :: Parser (String, Maybe Expr)
+pAutoDecl :: Parser (VarName, Maybe Expr)
 pAutoDecl = do
     name <- pName
     size <- optional $ brackets pExpr
@@ -233,7 +234,7 @@ pReturn = do
 pExprT :: Parser Statement
 pExprT = ExprT <$> (pExpr <* (symbol ";"))
 
-pName :: Parser String
+pName :: Parser VarName
 pName = lexeme
   ((:) <$> letterChar <*> many alphaNumChar <?> "name (alpha numeric, starting with letter)")
 
@@ -274,3 +275,6 @@ pGlobal = do
     expr <- optional pExpr
     _ <- symbol ";"
     return $ Global name expr
+
+pProg :: Parser Program
+pProg = many pDef

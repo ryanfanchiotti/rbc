@@ -207,5 +207,6 @@ analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
 analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
 
 -- Ensure AST is valid before code generation
-analyzeProg = undefined
+analyzeProg :: DefinedVars -> Labels -> Gotos -> Program -> (DefinedVars -> Labels -> Gotos)
+analyzeProg dv l g prog = undefined
         

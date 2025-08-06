@@ -111,8 +111,31 @@ checkDefs = describe "tests for definition parsing (functions and globals)" $ do
     it "parses a global def without a value" $
         parse (pDef <* eof) "" "glob;" `shouldParse` (Global "glob" Nothing)
 
+checkProgs :: Spec
+checkProgs = describe "tests for program parsing" $
+    it "parses a simple program" $
+        parse (pProg <* eof) "" (unlines [
+            "myglob 1;",
+            "myvec[];",
+            "main(a,b,c) {",
+            "   auto d;",
+            "   d = a + b + c;",
+            "   printf(\"Hello World %d\", d);",
+            "}"
+        ]) `shouldParse` [
+            Global "myglob" (Just (IntT 1)), 
+            GlobalVec "myvec" Nothing Nothing, 
+            Func "main" ["a", "b", "c"] 
+            (Compound [
+                Auto [("d", Nothing)],
+                ExprT (Assign (Var "d") (Add (Add (Var "a") (Var "b")) (Var "c"))),
+                ExprT (FunCall [StringT "Hello World %d", Var "d"] (Var "printf"))
+            ])
+        ]
+
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do
     checkExprs
     checkStatements
     checkDefs
+    checkProgs

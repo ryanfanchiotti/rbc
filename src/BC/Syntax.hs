@@ -1,7 +1,9 @@
 module BC.Syntax (
     Expr(..),
     Statement(..),
-    Definition(..)
+    Definition(..),
+    Program,
+    VarName
 ) where
 
 type VarName = String
@@ -87,3 +89,5 @@ data Definition
     | Global VarName (Maybe Expr) -- Name, init-val
     | GlobalVec VarName (Maybe Expr) (Maybe [Expr]) -- Name, size, init-list
     deriving (Eq, Ord, Show)
+
+type Program = [Definition]
