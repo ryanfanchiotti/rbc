@@ -207,6 +207,15 @@ analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
 analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
 
 -- Ensure AST is valid before code generation
-analyzeProg :: DefinedVars -> Labels -> Gotos -> Program -> (DefinedVars -> Labels -> Gotos)
-analyzeProg dv l g prog = undefined
+analyzeProg :: DefinedVars -> Labels -> Gotos -> Program -> Either Error (DefinedVars -> Labels -> Gotos)
+analyzeProg dv l g [] = undefined
+analyzeProg dv l g ((Func name args stmt):defs) = undefined
+analyzeProg dv l g ((Global name Nothing):defs) = undefined
+analyzeProg dv l g ((Global name (Just expr)):defs) = undefined
+analyzeProg dv l g ((GlobalVec name Nothing Nothing):defs) = undefined
+analyzeProg dv l g ((GlobalVec name (Just expr) Nothing):defs) = undefined
+analyzeProg dv l g ((GlobalVec name (Just expr) (Just init_list)):defs) = undefined
+analyzeProg dv l g ((GlobalVec name Nothing (Just init_list)):defs) = undefined
+
+
         
