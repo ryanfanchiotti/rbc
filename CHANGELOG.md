@@ -1,4 +1,4 @@
-# Revision history for megaparsec-test
+# Revision history for BC
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

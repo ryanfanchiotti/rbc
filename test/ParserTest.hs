@@ -112,7 +112,7 @@ checkDefs = describe "tests for definition parsing (functions and globals)" $ do
         parse (pDef <* eof) "" "glob;" `shouldParse` (Global "glob" Nothing)
 
 checkProgs :: Spec
-checkProgs = describe "tests for program parsing" $
+checkProgs = describe "tests for program parsing" $ do
     it "parses a simple program" $
         parse (pProg <* eof) "" (unlines [
             "myglob 1;",
@@ -131,6 +131,27 @@ checkProgs = describe "tests for program parsing" $
                 ExprT (Assign (Var "d") (Add (Add (Var "a") (Var "b")) (Var "c"))),
                 ExprT (FunCall [StringT "Hello World %d", Var "d"] (Var "printf"))
             ])
+        ]
+    it "parses a program with chained if else" $
+        parse (pProg <* eof) "" (unlines [
+            "main () {",
+            "   if (1) 1;",
+            "   else if (2) 2;",
+            "   else if (3) 3;",
+            "   else 4;",
+            "   5;",
+            "}"
+        ]) `shouldParse` [
+            Func "main" [] 
+            (Compound [
+                IfElse (IntT 1) 
+                    (ExprT (IntT 1)) 
+                    (IfElse (IntT 2) 
+                        (ExprT (IntT 2)) 
+                        (IfElse (IntT 3) 
+                            (ExprT (IntT 3)) 
+                            (ExprT (IntT 4)))), 
+                ExprT (IntT 5)])
         ]
 
 parseSpec :: Spec

@@ -44,6 +44,11 @@ evalConstExpr (ShiftL a b) = binConstExpr (shiftL) a b
 evalConstExpr (ShiftR a b) = binConstExpr (shiftR) a b
 evalConstExpr _ = Nothing
 
+evalConstExpr' :: Expr -> Maybe Expr
+evalConstExpr' e = do
+    ce <- evalConstExpr e
+    return $ IntT ce
+
 -- Binary constant expression evaluation
 binConstExpr :: (Int -> Int -> Int) -> Expr -> Expr -> Maybe Int
 binConstExpr f a b = do
@@ -61,8 +66,8 @@ isLValue _ = Left $ "assignment can only be done to vars, derefs, or indexed vec
 -- Are this Expr and the nested Exprs inside of it valid?
 -- Perform constant folding where possible
 analyzeExpr :: DefinedVars -> Expr -> Either Error Expr
-analyzeExpr dv e 
-    | (Just const_int) <- evalConstExpr e = Right (IntT const_int)
+analyzeExpr dv e
+    | (Just const_int) <- evalConstExpr' e = Right const_int
     | (Var name) <- e = if S.member name dv then Right e else Left $ name ++ " used before definition"
     | (IntT _) <- e = Right e
     | (FloatT _) <- e = Right e
@@ -206,16 +211,53 @@ analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
         return (st' : next, l'', g'')
 analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
 
+defName :: Definition -> String
+defName (Func n _ _) = n
+defName (Global n _) = n
+defName (GlobalVec n _ _) = n
+
 -- Ensure AST is valid before code generation
-analyzeProg :: DefinedVars -> Labels -> Gotos -> Program -> Either Error (DefinedVars -> Labels -> Gotos)
-analyzeProg dv l g [] = undefined
-analyzeProg dv l g ((Func name args stmt):defs) = undefined
-analyzeProg dv l g ((Global name Nothing):defs) = undefined
-analyzeProg dv l g ((Global name (Just expr)):defs) = undefined
-analyzeProg dv l g ((GlobalVec name Nothing Nothing):defs) = undefined
-analyzeProg dv l g ((GlobalVec name (Just expr) Nothing):defs) = undefined
-analyzeProg dv l g ((GlobalVec name (Just expr) (Just init_list)):defs) = undefined
-analyzeProg dv l g ((GlobalVec name Nothing (Just init_list)):defs) = undefined
+analyzeProg :: Program -> Either Error Program
+analyzeProg prog = do
+    let names = map defName prog
+    (prog', _) <- analyzeProg' S.empty prog
+    let hasDupes xs = length xs /= (length $ S.fromList xs)
+    if hasDupes names
+        then Left "duplicate definitions"
+        else Right prog'
 
+analyzeProg' :: DefinedVars -> Program -> Either Error (Program, DefinedVars)
+analyzeProg' dv def_l
+    | [] <- def_l = Right ([], dv)
 
-        
+    | ((Func name args stmt):defs) <- def_l = do
+        let dv_funcname = S.union dv $ S.fromList [name]
+        let dv' = S.union dv_funcname (S.fromList args)
+        (_, stmt', gotos, labels) <- analyzeStatement (dv', stmt, S.empty, S.empty) OtherS
+        -- Make sure gotos are a subset of labels
+        if gotos `S.isSubsetOf` labels 
+            then Right ((Func name args stmt'):defs, dv_funcname)
+            else Left "gotos are not a subset of labels"
+
+    | ((Global name (Just expr)):defs) <- def_l,
+      (Just const_expr) <- evalConstExpr' expr = do
+        (next, _) <- analyzeProg' dv defs
+        return ((Global name (Just const_expr)):next, dv)
+    | ((Global name (Just _)):_) <- def_l = Left $ "global "
+        ++ name ++ " is not assigned to a constant"
+
+    | ((GlobalVec name (Just expr) Nothing):defs) <- def_l,
+      (Just const_expr) <- evalConstExpr' expr = do
+        (next, _) <- analyzeProg' dv defs
+        return ((GlobalVec name (Just const_expr) Nothing):next, dv)
+    | ((GlobalVec name (Just expr) (Just init_list)):defs) <- def_l,
+      (Just const_expr) <- evalConstExpr' expr,
+      (Just const_list) <- mapM evalConstExpr' init_list = do
+        (next, _) <- analyzeProg' dv defs
+        return ((GlobalVec name (Just const_expr) (Just const_list)):next, dv)
+    | ((GlobalVec name (Just _) Nothing):_) <- def_l = Left $ "global vec " ++
+        name ++ "is not assigned to a constant"
+
+    | (def:defs) <- def_l = do
+        (next, _) <- analyzeProg' dv defs
+        return ((def:next), dv)
