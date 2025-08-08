@@ -224,7 +224,7 @@ analyzeProg prog = do
     (prog', _) <- analyzeProg' S.empty prog
     let hasDupes xs = length xs /= (length $ S.fromList xs)
     if hasDupes names
-        then Left "duplicate definitions"
+        then Left "duplicate definitions at top level"
         else Right prog'
 
 analyzeProg' :: DefinedVars -> Program -> Either Error (Program, DefinedVars)
@@ -235,9 +235,10 @@ analyzeProg' dv def_l
         let dv_funcname = S.union dv $ S.fromList [name]
         let dv' = S.union dv_funcname (S.fromList args)
         (_, stmt', labels, gotos) <- analyzeStatement (dv', stmt, S.empty, S.empty) OtherS
-        -- Make sure gotos are a subset of labels
+        (next, _) <- analyzeProg' dv_funcname defs
+        -- Make sure there are no gotos leading to nowhere
         if gotos `S.isSubsetOf` labels 
-            then (Right ((Func name args stmt'):defs, dv_funcname))
+            then (Right ((Func name args stmt'):next, dv_funcname))
             else Left "gotos are not a subset of labels"
 
     | ((Global name (Just expr)):defs) <- def_l,

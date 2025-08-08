@@ -135,7 +135,7 @@ checkProgramAnalysis :: Spec
 checkProgramAnalysis = describe "tests for analyzing a full program ast" $ do
     it "errors on double names" $ analyzeProg
         [Global "a" Nothing, GlobalVec "a" Nothing Nothing]
-        `testEq` Left "duplicate definitions"
+        `testEq` Left "duplicate definitions at top level"
     it "errors on non const globals" $ analyzeProg
         [Global "a" (Just (FunCall [IntT 1, IntT 2] (Var "myfuncname")))]
         `testEq` Left "global a is not assigned to a constant"
@@ -145,3 +145,10 @@ checkProgramAnalysis = describe "tests for analyzing a full program ast" $ do
     it "errors on bad gotos" $ analyzeProg
         [Func "main" ["argc", "argv"] (Goto "L2")]
         `testEq` Left "gotos are not a subset of labels"
+    it "errors on redefinition of outside function" $ analyzeProg
+        [ Func "a" [] (ExprT (IntT 1)),
+        Func "main" ["argc", "argv"]
+            (Compound [
+                Auto [("a", Nothing)]
+            ])
+        ] `testEq` Left "auto vars a already defined"
