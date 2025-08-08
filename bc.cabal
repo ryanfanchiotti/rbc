@@ -81,6 +81,7 @@ test-suite bc-test
     main-is: Main.hs
     other-modules: ParserTest
                    AnalysisTest
+                   TestUtils
     build-depends:   base ^>= 4.19.2.0
                    , hspec ^>= 2.11.12
                    , hspec-megaparsec ^>= 2.2.1

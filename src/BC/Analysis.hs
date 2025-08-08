@@ -3,6 +3,7 @@ module BC.Analysis (
     isLValue,
     analyzeExpr,
     analyzeStatement,
+    analyzeProg,
     ParentS(..)
 ) where
 
@@ -233,10 +234,10 @@ analyzeProg' dv def_l
     | ((Func name args stmt):defs) <- def_l = do
         let dv_funcname = S.union dv $ S.fromList [name]
         let dv' = S.union dv_funcname (S.fromList args)
-        (_, stmt', gotos, labels) <- analyzeStatement (dv', stmt, S.empty, S.empty) OtherS
+        (_, stmt', labels, gotos) <- analyzeStatement (dv', stmt, S.empty, S.empty) OtherS
         -- Make sure gotos are a subset of labels
         if gotos `S.isSubsetOf` labels 
-            then Right ((Func name args stmt'):defs, dv_funcname)
+            then (Right ((Func name args stmt'):defs, dv_funcname))
             else Left "gotos are not a subset of labels"
 
     | ((Global name (Just expr)):defs) <- def_l,
@@ -255,8 +256,8 @@ analyzeProg' dv def_l
       (Just const_list) <- mapM evalConstExpr' init_list = do
         (next, _) <- analyzeProg' dv defs
         return ((GlobalVec name (Just const_expr) (Just const_list)):next, dv)
-    | ((GlobalVec name (Just _) Nothing):_) <- def_l = Left $ "global vec " ++
-        name ++ "is not assigned to a constant"
+    | ((GlobalVec name (Just _) _):_) <- def_l = Left $ "global vec " ++
+        name ++ " is not assigned to a constant"
 
     | (def:defs) <- def_l = do
         (next, _) <- analyzeProg' dv defs
