@@ -65,9 +65,9 @@ checkStatements = describe "tests for statement parsing (ex: if (x) {a;})" $ do
     it "parses a simple compound statement" $
         parse (pStatement <* eof) "" "{L2: a; goto L2;}" `shouldParse` (Compound [LabelDec "L2", ExprT (Var "a"), Goto "L2"])
     it "parses an extern declaration list" $
-        parse (pStatement <* eof) "" "extern a, b, c;" `shouldParse` (Extern ["a", "b", "c"])
+        parse (pStatement <* eof) "" "extrn a, b, c;" `shouldParse` (Extern ["a", "b", "c"])
     it "doesn't parse an empty extern declaration list" $
-        parse (pStatement <* eof) "" `shouldFailOn` "extern;"
+        parse (pStatement <* eof) "" `shouldFailOn` "extrn;"
     it "parses a case statement" $
         parse (pStatement <* eof) "" "case 3:" `shouldParse` (Case (IntT 3))
     it "parses a switch statement with cases" $

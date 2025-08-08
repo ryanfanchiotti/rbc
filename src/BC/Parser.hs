@@ -161,7 +161,7 @@ pAutoDecl = do
 
 pExtern :: Parser Statement
 pExtern = do
-    _ <- symbol "extern"
+    _ <- symbol "extrn"
     names <- pName `sepBy1` (symbol ",")
     _ <- symbol ";"
     return $ Extern names
