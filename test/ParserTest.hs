@@ -153,6 +153,17 @@ checkProgs = describe "tests for program parsing" $ do
                             (ExprT (IntT 4)))), 
                 ExprT (IntT 5)])
         ]
+    it "parses a program with an empty while loop" $
+        parse (pProg <* eof) "" (unlines [
+            "main() {",
+            "   while (1) {}",
+            "}"
+        ]) `shouldParse` [
+            Func "main" []
+            (Compound [
+                While (IntT 1) (Compound [])
+            ])
+        ]
 
 parseSpec :: Spec
 parseSpec = describe "parser tests" $ do
