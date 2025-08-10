@@ -43,7 +43,7 @@ emitStmt s = undefined
 emitExpr :: Expr -> FuncState -> (CodeText, FuncState)
 emitExpr e fs
     | (Var vn) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (IntT i) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (IntT i) <- e = ["    $" ++ (show i) ++ ",%rax"]
     | (FloatT d) <- e = error $ "emitExpr todo: " ++ (show e)
     | (StringT s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
