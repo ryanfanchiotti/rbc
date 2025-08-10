@@ -58,6 +58,8 @@ library
     exposed-modules:  BC.Parser
                       BC.Syntax
                       BC.Analysis
+                      BC.NameUtils
+                      BC.CodeGen.AMD64
     build-depends:      base ^>=4.19.2.0
                       , megaparsec ^>= 9.7.0
                       , parser-combinators ^>= 1.3.0
