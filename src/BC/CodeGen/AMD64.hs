@@ -1,5 +1,9 @@
 module BC.CodeGen.AMD64 (
-    emitProg
+    emitProg,
+    emitDef,
+    emitStmt,
+    emitExpr,
+    FuncState(..)
 ) where
 
 -- Code generation for AMD64 Linux
@@ -23,6 +27,7 @@ module BC.CodeGen.AMD64 (
 import BC.Syntax
 import BC.Analysis
 import BC.NameUtils
+import Data.List
 import qualified Data.HashMap.Lazy as HM
 
 type DataText = [String]
@@ -42,26 +47,48 @@ data FuncState = FuncState
 
 -- Take a program and return lines to be mapped to a file
 emitProg :: Program -> [String]
-emitProg p = undefined
+emitProg p = let (dt, ct) = emitProg' p
+             in dt ++ [] ++ ct
+
+emitProg' :: Program -> (DataText, CodeText)
+emitProg' (def:defs) = let (dt, ct) = emitDef def
+                           (dt2, ct2) = emitProg' defs
+                      in (dt ++ dt2, ct ++ ct2)
+emitProg' [] = ([], [])
 
 emitDef :: Definition -> (DataText, CodeText)
-emitDef d = undefined
+emitDef (Func name args stmt) = undefined
+emitDef (Global name m_expr) = undefined
+emitDef (GlobalVec name m_size m_init_list) = undefined
 
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
 emitStmt s fs
-    | (Auto vns) <- s = undefined
-    | (Extern vns) <- s = undefined
+    | (Auto vns) <- s = emitAutos vns fs
+    -- Externs are dealt with automatically by gas
+    | (Extern vns) <- s = ([], [], addExterns vns fs)
     | (LabelDec ln) <- s = undefined
     | (Case e) <- s = undefined
-    | (Compound stmts) <- s = undefined
+    | (Compound stmts) <- s = emitCompounds stmts fs
     | (If e stmt) <- s = undefined
     | (IfElse e stmt_f stmt_s) <- s = undefined
     | (While e stmt) <- s = undefined
     | (Switch e stmt) <- s = undefined
-    | (Goto ln) <- s = undefined
+    | (Goto ln) <- s = ([], ["    jmp " ++ ln], fs)
     | (Return (Just e)) <- s = undefined
     | (Return Nothing) <- s = undefined
-    | (ExprT e) <- s = undefined
+    | (ExprT e) <- s = emitExpr e fs
+
+emitAutos :: [(VarName, Maybe Expr)] -> FuncState -> (DataText, CodeText, FuncState)
+emitAutos vns fs = undefined
+
+addExterns :: [VarName] -> FuncState -> FuncState
+addExterns vns fs = fs { var_type = foldl' (\hm x -> HM.insert x ExternT hm) (var_type fs) vns }
+
+emitCompounds :: [Statement] -> FuncState -> (DataText, CodeText, FuncState)
+emitCompounds (st:sts) fs = let (dt, ct, fs') = emitStmt st fs
+                                (dt2, ct2, fs'') = emitCompounds sts fs'
+                            in (dt ++ dt2, ct ++ ct2, fs'')
+emitCompounds [] fs = ([], [], fs)
 
 -- Put the address to be assigned to into RAX
 -- This returns the LValue context (where to assign)!
@@ -135,7 +162,7 @@ emitExpr e fs
     -- Otherwise we will assign to variable contents, etc and probably
     -- get segfaults
 
-    | (Addr expr) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Addr expr) <- e = emitAddrExpr e fs
     | (IncL expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (IncR expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecL expr) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -170,19 +197,22 @@ emitFunCall es fs = let
                         regs = map ((flip HM.lookup) reg_map) [0::Int ..]
                         new_es = zip es regs 
 
-                        needs_align = total_stack `mod` 16 /= 0
-                        extra_args = max 0 ((length es) - 6)
-                        total_stack = sp_loc fs + extra_args * 8
+                        total_stack = sp_loc fs
+                        needs_align = total_stack `mod` 16 == 0
+                        
                         align_inst = if needs_align
                                         then ["    sub $8,%rsp"]
                                         else []
-                        mov_r11 = ["    mov %rax, %r11"]
-                        (dt, ct, fs') = moveArgs new_es fs
-                        zero_rax = ["    xor %rax,%rax"]
-                        call = ["    call *%r11"]
-                        adj_amt = extra_args * 8 + (if needs_align then 8 else 0)
-                        adj_stack = ["    add $" ++ (show adj_amt) ++ ",%rsp"]
-                    in (dt, mov_r11 ++ ct ++ align_inst ++ zero_rax ++ call ++ adj_stack, fs')
+                        push_loc = ["    push %rax"]
+                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = total_stack + 8 }
+                        -- Get function to call that was pushed from RAX
+                        call = ["    xor %rax,%rax",
+                                "    pop %r11",
+                                "    call *%r11"]
+                        -- Move the stack pointer back where it should be
+                        adj_amt = if needs_align then 16 else 8
+                        adj_stack = ["    add $" ++ (show (adj_amt :: Int)) ++ ",%rsp"]
+                    in (move_d, push_loc ++ move_c ++ align_inst ++ call ++ adj_stack, fs' { sp_loc = (sp_loc fs') - 8})
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)
@@ -190,8 +220,5 @@ moveArgs ((e, Just reg):es) fs = let
                                     (dt, ct, fs') = emitExpr e fs
                                     (dt2, ct2, fs'') = moveArgs es fs'
                                  in (dt ++ dt2, ct ++ ["    mov %rax," ++ reg] ++ ct2, fs'')
-moveArgs ((e, Nothing):es) fs = let
-                                    (dt, ct, fs') = emitExpr e fs
-                                    (dt2, ct2, fs'') = moveArgs es fs'
-                                 in (dt ++ dt2, ct ++ ["    push %rax"] ++ ct2, fs'')
+moveArgs ((_, Nothing):_) _ = error "TODO: function calls with more than 6 args"
     
