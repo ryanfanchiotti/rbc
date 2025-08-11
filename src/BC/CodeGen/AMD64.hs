@@ -67,10 +67,13 @@ emitStmt s fs
 -- This returns the LValue context (where to assign)!
 emitAddrExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitAddrExpr e fs
-    | (Var vn) <- e = undefined
-    | (Deref expr) <- e = undefined
+    | (Var vn) <- e, (var_type fs) HM.! vn == AutoT = 
+        ([], ["    mov %rbp,%rax", "sub $" ++ (show ((var_loc fs) HM.! vn)) ++ ",%rax"], fs)
+    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT = ([], ["    mov " ++ vn ++ "(%rip),%rax"], fs)
+    -- Address will simply be the result of expr
+    | (Deref expr) <- e = emitExpr expr fs
     -- Expr + index * 8
-    | (VecIdx index expr) <- e = undefined
+    | (VecIdx index name) <- e = undefined
 
 -- Put the result of an expression into RAX
 -- This returns the RValue context (what is inside a variable, etc)!
@@ -83,11 +86,12 @@ emitExpr e fs
     | (IntT i) <- e = ([], ["    mov $" ++ (show i) ++ ",%rax"], fs)
     -- Floating point numbers are stored as integers here
     | (FloatT d) <- e = error $ "emitExpr todo: " ++ (show e)
+    -- Strings are in pointers to null terminated strings in .data
     | (StringT s) <- e = let
                             (name, ns) = makeName $ name_state fs
                             fs' = fs { name_state = ns }
                          in
-                         ([name ++ ": .asciz \"" ++ s ++ "\""], ["mov $" ++ name ++ ",%rax"], fs')
+                         ([name ++ ": .asciz \"" ++ s ++ "\""], ["mov " ++ name ++ "(%rip),%rax"], fs')
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Deref expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -101,14 +105,15 @@ emitExpr e fs
     | (Lt expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Le expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Eq expr expr_s) <- e = let
-                                    (dt1, ct1, fs') = emitExpr expr fs
-                                    (dt2, ct2, fs'') = emitExpr expr_s fs'
-                                    ct3 = ct1 ++ 
-                                          ["    mov %rax,%r10"] ++ 
-                                          ct2 ++ 
-                                          ["    cmp %rax,%r10", 
-                                          "    setz %al",
-                                          "    movzbl %al,%eax"]
+                                (dt1, ct1, fs') = emitExpr expr fs
+                                (dt2, ct2, fs'') = emitExpr expr_s fs'
+                                ct3 = ct1 ++ 
+                                        ["    push %rax"] ++ 
+                                        ct2 ++ 
+                                        ["    pop %r10",
+                                        "    cmp %rax,%r10", 
+                                        "    setz %al",
+                                        "    movzbl %al,%eax"]
                               in
                               (dt1 ++ dt2, ct3, fs'')
     | (NotEq expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -120,7 +125,10 @@ emitExpr e fs
     | (VecIdx idx name) <- e = error $ "emitExpr todo: " ++ (show e)
     -- When a function is called on an LValue, use the LValue context when
     -- trying to call what is at the given address
-    | (FunCall args addr) <- e, isLValueB e = error $ "emitExpr todo: " ++ (show e)
+    | (FunCall args addr) <- e, isLValueB e = let
+                                                (dt, ct, fs') = emitAddrExpr addr fs
+                                                (dt2, ct2, fs'') = emitFunCall args fs'
+                                              in (dt ++ dt2, ct ++ ct2, fs'')
     | (FunCall args addr) <- e = error $ "emitExpr todo: " ++ (show e)
 
     -- For assignment statements, finding the LValue context is needed
@@ -132,8 +140,12 @@ emitExpr e fs
     | (IncR expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecL expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecR expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Assign expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Assign expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Assign expr expr_s) <- e = let
+                                    (dt, ct, fs') = emitAddrExpr expr fs
+                                    tmp = ["    push %rax"]
+                                    (dt2, ct2, fs'') = emitExpr expr_s fs'
+                                    move = ["    pop %r10", "mov %rax,(%r10)"]
+                                  in (dt ++ dt2, ct ++ tmp ++ ct2 ++ move, fs'')
     | (AssignAdd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignSub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignMul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -147,23 +159,39 @@ emitExpr e fs
 -- Stack pointer must be 16 byte aligned, it will always be 8 byte aligned here
 -- RAX must have 0 to state that no sse registers are used
 -- Assumes address to call is in RAX, and moves it to R11
--- WORK IN PROGRESS
-emitFunCall :: [Expr] -> VarName -> FuncState -> (DataText, CodeText, FuncState)
-emitFunCall es name fs = undefined
-                        --  let
-                        --     reg_map = HM.fromList [ (0, "%rdi"), 
-                        --                             (1, "%rsi"), 
-                        --                             (2, "%rdx"),
-                        --                             (3, "%rcx"), 
-                        --                             (4, "%r8"), 
-                        --                             (5, "%r9") ]
-                        --     regs = map ((flip HM.lookup) reg_map) [0..]
-                        --     new_es = zip es regs 
+emitFunCall :: [Expr] -> FuncState -> (DataText, CodeText, FuncState)
+emitFunCall es fs = let
+                        reg_map = HM.fromList [ (0, "%rdi"), 
+                                                (1, "%rsi"), 
+                                                (2, "%rdx"),
+                                                (3, "%rcx"), 
+                                                (4, "%r8"), 
+                                                (5, "%r9") ]
+                        regs = map ((flip HM.lookup) reg_map) [0::Int ..]
+                        new_es = zip es regs 
 
-                        --     extra_args = max 0 ((length es) - 6)
-                        --     total_stack = sp_loc fs + extra_args * 8
-                        --     align_inst = if total_stack `mod` 16 == 0
-                        --                     then []
-                        --                     else ["    sub $8,%rsp"]
-                        --   in ([], [], fs)
+                        needs_align = total_stack `mod` 16 /= 0
+                        extra_args = max 0 ((length es) - 6)
+                        total_stack = sp_loc fs + extra_args * 8
+                        align_inst = if needs_align
+                                        then ["    sub $8,%rsp"]
+                                        else []
+                        mov_r11 = ["    mov %rax, %r11"]
+                        (dt, ct, fs') = moveArgs new_es fs
+                        zero_rax = ["    xor %rax,%rax"]
+                        call = ["    call *%r11"]
+                        adj_amt = extra_args * 8 + (if needs_align then 8 else 0)
+                        adj_stack = ["    add $" ++ (show adj_amt) ++ ",%rsp"]
+                    in (dt, mov_r11 ++ ct ++ align_inst ++ zero_rax ++ call ++ adj_stack, fs')
+
+moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
+moveArgs [] fs = ([], [], fs)
+moveArgs ((e, Just reg):es) fs = let
+                                    (dt, ct, fs') = emitExpr e fs
+                                    (dt2, ct2, fs'') = moveArgs es fs'
+                                 in (dt ++ dt2, ct ++ ["    mov %rax," ++ reg] ++ ct2, fs'')
+moveArgs ((e, Nothing):es) fs = let
+                                    (dt, ct, fs') = emitExpr e fs
+                                    (dt2, ct2, fs'') = moveArgs es fs'
+                                 in (dt ++ dt2, ct ++ ["    push %rax"] ++ ct2, fs'')
     
