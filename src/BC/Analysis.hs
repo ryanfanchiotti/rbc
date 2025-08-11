@@ -1,6 +1,7 @@
 module BC.Analysis (
     evalConstExpr,
     isLValue,
+    isLValueB,
     analyzeExpr,
     analyzeStatement,
     analyzeProg,
@@ -63,6 +64,13 @@ isLValue e@(Var _) = Right e
 isLValue e@(Deref _) = Right e
 isLValue e@(VecIdx _ _) = Right e
 isLValue _ = Left $ "assignment can only be done to vars, derefs, or indexed vecs"
+
+isLValueB :: Expr -> Bool
+isLValueB e@(Var _) = True
+isLValueB e@(Deref _) = True
+isLValueB e@(VecIdx _ _) = True
+isLValueB _ = False
+
 
 -- Are this Expr and the nested Exprs inside of it valid?
 -- Perform constant folding where possible
