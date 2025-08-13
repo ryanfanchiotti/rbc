@@ -44,7 +44,7 @@ checkExprs = describe "tests for exprs (which roughly correspond to an rvalue)" 
     it "parses an assignment to a string" $
         parse (pExpr <* eof) "" "a = \"testing\"" `shouldParse` (Assign (Var "a") (StringT "testing"))
     it "parses an assignment to a string with escapes" $
-        parse (pExpr <* eof) "" "a = \"a\nb\tc\"" `shouldParse` (Assign (Var "a") (StringT "a\nb\tc"))
+        parse (pExpr <* eof) "" "a = \"a\\nb\\tc\"" `shouldParse` (Assign (Var "a") (StringT "a\nb\tc"))
     it "parses an assignment to a string with escaped quotations" $
         parse (pExpr <* eof) "" "a = \"testing\\\"testing\"" `shouldParse` (Assign (Var "a") (StringT "testing\"testing"))
     it "parses multiple unary operators in the right order" $

@@ -72,9 +72,8 @@ emitPrelude :: [VarName] -> NameState -> ([String], FuncState)
 emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
                           regs = zip args reg_list
                           setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
-                          setup_args = map ("    push %" ++) reg_list
-                          enumerate = zip [0..]
-                          fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, idx + 8 + (8 * idx))) (enumerate args))
+                          setup_args = map ("    push " ++) (take (length args) reg_list)
+                          fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, idx + 8 + (8 * idx))) (zip [0..] args))
                                          , var_type = HM.fromList (zip args (repeat AutoT)) 
                                          , sp_loc = (length args) * 8 + 8 
                                          , name_state = ns }
@@ -129,7 +128,7 @@ emitExpr e fs
     | (Var vn) <- e, (var_type fs) HM.! vn == AutoT = 
         ([], ["    mov -" ++ (show ((var_loc fs) HM.! vn)) ++ "(%rbp),%rax"], fs)
     | (Var vn) <- e, (var_type fs) HM.! vn == ExternT =
-        ([], ["    lea " ++ vn ++ "(%rip),%rax", "    mov (%rax),%rax"], fs)
+        ([], ["    mov " ++ vn ++ "(%rip),%rax"], fs)
     | (IntT i) <- e = ([], ["    mov $" ++ (show i) ++ ",%rax"], fs)
     -- Floating point numbers are stored as integers here
     | (FloatT d) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -138,7 +137,7 @@ emitExpr e fs
                             (name, ns) = makeName $ name_state fs
                             fs' = fs { name_state = ns }
                          in
-                         ([name ++ ": .asciz \"" ++ s ++ "\""], ["lea " ++ name ++ "(%rip),%rax"], fs')
+                         ([name ++ ": .asciz \"" ++ s ++ "\""], ["    lea " ++ name ++ "(%rip),%rax"], fs')
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Deref expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -172,11 +171,8 @@ emitExpr e fs
     | (VecIdx idx name) <- e = error $ "emitExpr todo: " ++ (show e)
     -- When a function is called on an LValue, use the LValue context when
     -- trying to call what is at the given address
-    | (FunCall args addr) <- e, isLValueB e = let
-                                                (dt, ct, fs') = emitAddrExpr addr fs
-                                                (dt2, ct2, fs'') = emitFunCall args fs'
-                                              in (dt ++ dt2, ct ++ ct2, fs'')
-    | (FunCall args addr) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (FunCall args addr) <- e, isLValueB addr = funCall addr args emitAddrExpr
+    | (FunCall args addr) <- e = funCall addr args emitExpr
 
     -- For assignment statements, finding the LValue context is needed
     -- Otherwise we will assign to variable contents, etc and probably
@@ -203,6 +199,12 @@ emitExpr e fs
     | (AssignShiftL expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignShiftR expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
 
+    where
+        funCall addr args emitType = let
+                                        (dt, ct, fs') = emitType addr fs
+                                        (dt2, ct2, fs'') = emitFunCall args fs'
+                                     in (dt ++ dt2, ct ++ ct2, fs'')
+
 -- Stack pointer must be 16 byte aligned, it will always be 8 byte aligned here
 -- RAX must have 0 to state that no sse registers are used
 -- Assumes address to call is in RAX, and moves it to R11
@@ -212,21 +214,21 @@ emitFunCall es fs = let
                         new_es = zip es regs 
 
                         total_stack = sp_loc fs
-                        needs_align = total_stack `mod` 16 == 0
+                        needs_align = total_stack `mod` 16 /= 0
                         
                         align_inst = if needs_align
                                         then ["    sub $8,%rsp"]
                                         else []
                         push_loc = ["    push %rax"]
-                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = total_stack + 8 }
+                        (move_d, move_c, _) = moveArgs new_es fs { sp_loc = total_stack + 8 }
                         -- Get function to call that was pushed from RAX
-                        call = ["    xor %rax,%rax",
-                                "    pop %r11",
-                                "    call *%r11"]
+                        call_pre = ["    xor %rax,%rax",
+                                "    pop %r11"]
+                        call = ["    call *%r11"]
                         -- Move the stack pointer back where it should be
-                        adj_amt = if needs_align then 16 else 8
-                        adj_stack = ["    add $" ++ (show (adj_amt :: Int)) ++ ",%rsp"]
-                    in (move_d, push_loc ++ move_c ++ align_inst ++ call ++ adj_stack, fs' { sp_loc = (sp_loc fs') - 8})
+                        adj_stack = if needs_align then ["    add $8,%rsp"] else []
+                    -- Use original function state, since the location was popped off the stack
+                    in (move_d, push_loc ++ move_c ++ call_pre ++ align_inst ++ call ++ adj_stack, fs)
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)

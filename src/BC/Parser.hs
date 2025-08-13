@@ -45,12 +45,11 @@ pOctal = IntT <$> lexeme (char '0' >> L.octal)
 pFloat :: Parser Expr
 pFloat = FloatT <$> lexeme L.float
 
+stringLiteral :: Parser String
+stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
+
 pString :: Parser Expr
-pString = StringT <$> lexeme (between (symbol "\"") (symbol "\"") contents)
-  where
-    -- Replace \" with ", all other escapes should be fine?
-    contents = many (escape <|> noneOf "\"")
-    escape = char '\\' >> char '"'
+pString = StringT <$> lexeme stringLiteral
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
