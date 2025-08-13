@@ -5,6 +5,7 @@ module BC.Analysis (
     analyzeExpr,
     analyzeStatement,
     analyzeProg,
+    defName,
     ParentS(..)
 ) where
 

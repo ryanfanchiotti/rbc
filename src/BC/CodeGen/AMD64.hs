@@ -47,19 +47,38 @@ data FuncState = FuncState
 
 -- Take a program and return lines to be mapped to a file
 emitProg :: Program -> [String]
-emitProg p = let (dt, ct) = emitProg' p
-             in dt ++ [] ++ ct
+emitProg p = let (dt, ct, ns) = emitProg' p makeNameState
+             in map ((".global " ++) . defName) p ++ [".data"] ++ dt ++ [".text"] ++ ct
 
-emitProg' :: Program -> (DataText, CodeText)
-emitProg' (def:defs) = let (dt, ct) = emitDef def
-                           (dt2, ct2) = emitProg' defs
-                      in (dt ++ dt2, ct ++ ct2)
-emitProg' [] = ([], [])
+emitProg' :: Program -> NameState -> (DataText, CodeText, NameState)
+emitProg' (def:defs) ns = let (dt, ct, ns') = emitDef def ns
+                              (dt2, ct2, ns'') = emitProg' defs ns'
+                          in (dt ++ dt2, ct ++ ct2, ns'')
+emitProg' [] ns = ([], [], ns)
 
-emitDef :: Definition -> (DataText, CodeText)
-emitDef (Func name args stmt) = undefined
-emitDef (Global name m_expr) = undefined
-emitDef (GlobalVec name m_size m_init_list) = undefined
+emitDef :: Definition -> NameState -> (DataText, CodeText, NameState)
+emitDef (Func name args stmt) ns = let lab = [name ++ ":"]
+                                       (prelude, fs) = emitPrelude args ns
+                                       (dt, ct, fs') = emitStmt stmt fs
+                                   in (dt, lab ++ prelude ++ ct ++ emitReturn, name_state fs')
+emitDef (Global name m_expr) ns = undefined
+emitDef (GlobalVec name m_size m_init_list) ns = undefined
+
+emitReturn :: [String]
+emitReturn = ["    mov %rbp,%rsp", "    pop %rbp", "    ret"]
+
+-- Push RBP and rest of args onto stack and note location in function state
+emitPrelude :: [VarName] -> NameState -> ([String], FuncState)
+emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
+                          regs = zip args reg_list
+                          setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
+                          setup_args = map ("    push %" ++) reg_list
+                          enumerate = zip [0..]
+                          fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, idx + 8 + (8 * idx))) (enumerate args))
+                                         , var_type = HM.fromList (zip args (repeat AutoT)) 
+                                         , sp_loc = (length args) * 8 + 8 
+                                         , name_state = ns }
+                      in (setup_frame ++ setup_args, fs)
 
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
 emitStmt s fs
@@ -96,7 +115,7 @@ emitAddrExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitAddrExpr e fs
     | (Var vn) <- e, (var_type fs) HM.! vn == AutoT = 
         ([], ["    mov %rbp,%rax", "sub $" ++ (show ((var_loc fs) HM.! vn)) ++ ",%rax"], fs)
-    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT = ([], ["    mov " ++ vn ++ "(%rip),%rax"], fs)
+    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT = ([], ["    lea " ++ vn ++ "(%rip),%rax"], fs)
     -- Address will simply be the result of expr
     | (Deref expr) <- e = emitExpr expr fs
     -- Expr + index * 8
@@ -109,7 +128,8 @@ emitExpr e fs
     -- Auto vars are on the stack, extern vars are in .data
     | (Var vn) <- e, (var_type fs) HM.! vn == AutoT = 
         ([], ["    mov -" ++ (show ((var_loc fs) HM.! vn)) ++ "(%rbp),%rax"], fs)
-    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT = error $ "emitExpr todo: " ++ (show e)
+    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT =
+        ([], ["    lea " ++ vn ++ "(%rip),%rax", "    mov (%rax),%rax"], fs)
     | (IntT i) <- e = ([], ["    mov $" ++ (show i) ++ ",%rax"], fs)
     -- Floating point numbers are stored as integers here
     | (FloatT d) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -118,7 +138,7 @@ emitExpr e fs
                             (name, ns) = makeName $ name_state fs
                             fs' = fs { name_state = ns }
                          in
-                         ([name ++ ": .asciz \"" ++ s ++ "\""], ["mov " ++ name ++ "(%rip),%rax"], fs')
+                         ([name ++ ": .asciz \"" ++ s ++ "\""], ["lea " ++ name ++ "(%rip),%rax"], fs')
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Deref expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -188,13 +208,7 @@ emitExpr e fs
 -- Assumes address to call is in RAX, and moves it to R11
 emitFunCall :: [Expr] -> FuncState -> (DataText, CodeText, FuncState)
 emitFunCall es fs = let
-                        reg_map = HM.fromList [ (0, "%rdi"), 
-                                                (1, "%rsi"), 
-                                                (2, "%rdx"),
-                                                (3, "%rcx"), 
-                                                (4, "%r8"), 
-                                                (5, "%r9") ]
-                        regs = map ((flip HM.lookup) reg_map) [0::Int ..]
+                        regs = (map Just ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]) ++ (repeat Nothing)
                         new_es = zip es regs 
 
                         total_stack = sp_loc fs
