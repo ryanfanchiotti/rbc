@@ -60,6 +60,7 @@ emitDef :: Definition -> NameState -> (DataText, CodeText, NameState)
 emitDef (Func name args stmt) ns = let lab = [name ++ ":"]
                                        (prelude, fs) = emitPrelude args ns
                                        (dt, ct, fs') = emitStmt stmt fs
+                                       post = if name == "main" then emitReturn else []
                                    in (dt, lab ++ prelude ++ ct ++ emitReturn, name_state fs')
 emitDef (Global name m_expr) ns = undefined
 emitDef (GlobalVec name m_size m_init_list) ns = undefined
@@ -79,12 +80,15 @@ emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r
                                          , name_state = ns }
                       in (setup_frame ++ setup_args, fs)
 
+-- Compounds carry the function state through, but analysis makes sure
+-- that variables are used after being defined. This means we can use the function state
+-- from higher scopes at lower scopes if needed
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
 emitStmt s fs
     | (Auto vns) <- s = emitAutos vns fs
     -- Externs are dealt with automatically by gas
     | (Extern vns) <- s = ([], [], addExterns vns fs)
-    | (LabelDec ln) <- s = undefined
+    | (LabelDec ln) <- s = ([], [ln ++ ":"], fs)
     | (Case e) <- s = undefined
     | (Compound stmts) <- s = emitCompounds stmts fs
     | (If e stmt) <- s = undefined
@@ -92,8 +96,9 @@ emitStmt s fs
     | (While e stmt) <- s = undefined
     | (Switch e stmt) <- s = undefined
     | (Goto ln) <- s = ([], ["    jmp " ++ ln], fs)
-    | (Return (Just e)) <- s = undefined
-    | (Return Nothing) <- s = undefined
+    | (Return (Just e)) <- s = let (dt, ct, fs') = emitExpr e fs
+                               in (dt, ct ++ emitReturn, fs')
+    | (Return Nothing) <- s = ([], ["    xor %rax,%rax"] ++ emitReturn, fs)
     | (ExprT e) <- s = emitExpr e fs
 
 emitAutos :: [(VarName, Maybe Expr)] -> FuncState -> (DataText, CodeText, FuncState)
@@ -143,7 +148,12 @@ emitExpr e fs
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Deref expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Add expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Add expr expr_s) <- e = let
+                                   (dt, ct, fs') = emitExpr expr fs
+                                   save = ["    push %rax"]
+                                   (dt1, ct1, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
+                                   restore_add = ["    pop %r10", "    add %r10,%rax"]
+                               in (dt ++ dt1, ct ++ save ++ ct1 ++ restore_add, fs'' {sp_loc = sp_loc fs'' - 8})
     | (Sub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Mul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Div expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -154,16 +164,16 @@ emitExpr e fs
     | (Le expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Eq expr expr_s) <- e = let
                                 (dt1, ct1, fs') = emitExpr expr fs
-                                (dt2, ct2, fs'') = emitExpr expr_s fs'
+                                (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
                                 ct3 = ct1 ++ 
                                         ["    push %rax"] ++ 
                                         ct2 ++ 
                                         ["    pop %r10",
                                         "    cmp %rax,%r10", 
                                         "    setz %al",
-                                        "    movzbl %al,%eax"]
+                                        "    movzx %al,%rax"]
                               in
-                              (dt1 ++ dt2, ct3, fs'')
+                              (dt1 ++ dt2, ct3, fs'' {sp_loc = sp_loc fs'' - 8})
     | (NotEq expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (BitOr expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (BitAnd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -188,9 +198,9 @@ emitExpr e fs
     | (Assign expr expr_s) <- e = let
                                     (dt, ct, fs') = emitAddrExpr expr fs
                                     tmp = ["    push %rax"]
-                                    (dt2, ct2, fs'') = emitExpr expr_s fs'
+                                    (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
                                     move = ["    pop %r10", "mov %rax,(%r10)"]
-                                  in (dt ++ dt2, ct ++ tmp ++ ct2 ++ move, fs'')
+                                  in (dt ++ dt2, ct ++ tmp ++ ct2 ++ move, fs'' {sp_loc = sp_loc fs'' - 8})
     | (AssignAdd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignSub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignMul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
