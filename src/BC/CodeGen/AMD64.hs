@@ -122,6 +122,8 @@ emitAddrExpr e fs
 
 -- Put the result of an expression into RAX
 -- This returns the RValue context (what is inside a variable, etc)!
+-- Emitting an expression does not change the stack state,
+-- all pushes are cleaned up
 emitExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitExpr e fs
     -- Auto vars are on the stack, extern vars are in .data
