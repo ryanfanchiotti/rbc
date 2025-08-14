@@ -60,8 +60,8 @@ emitDef :: Definition -> NameState -> (DataText, CodeText, NameState)
 emitDef (Func name args stmt) ns = let lab = [name ++ ":"]
                                        (prelude, fs) = emitPrelude args ns
                                        (dt, ct, fs') = emitStmt stmt fs
-                                       post = if name == "main" then emitReturn else []
-                                   in (dt, lab ++ prelude ++ ct ++ emitReturn, name_state fs')
+                                       post = if name == "main" then ["    xor %rax,%rax"] ++ emitReturn else []
+                                   in (dt, lab ++ prelude ++ ct ++ post, name_state fs')
 emitDef (Global name m_expr) ns = undefined
 emitDef (GlobalVec name m_size m_init_list) ns = undefined
 
@@ -80,9 +80,6 @@ emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r
                                          , name_state = ns }
                       in (setup_frame ++ setup_args, fs)
 
--- Compounds carry the function state through, but analysis makes sure
--- that variables are used after being defined. This means we can use the function state
--- from higher scopes at lower scopes if needed
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
 emitStmt s fs
     | (Auto vns) <- s = emitAutos vns fs
@@ -101,8 +98,16 @@ emitStmt s fs
     | (Return Nothing) <- s = ([], ["    xor %rax,%rax"] ++ emitReturn, fs)
     | (ExprT e) <- s = emitExpr e fs
 
+-- Autos have optional const-expr size
 emitAutos :: [(VarName, Maybe Expr)] -> FuncState -> (DataText, CodeText, FuncState)
-emitAutos vns fs = undefined
+emitAutos ((vn, Nothing):vns) fs = let fs' = fs { sp_loc = sp_loc fs + 8
+                                                , var_loc = HM.insert vn (sp_loc fs + 8) (var_loc fs)
+                                                , var_type = HM.insert vn AutoT (var_type fs) }
+                                       (dt, ct, fs'') = emitAutos vns fs'
+                                   in (dt, ["    pushq $0"] ++ ct, fs'')
+emitAutos ((vn, (Just (IntT vec_size))):vns) fs = undefined
+emitAutos ((_, _):_) _ = error "non-const auto size, should be unreachable"
+emitAutos [] fs = ([], [], fs)
 
 addExterns :: [VarName] -> FuncState -> FuncState
 addExterns vns fs = fs { var_type = foldl' (\hm x -> HM.insert x ExternT hm) (var_type fs) vns }
@@ -155,13 +160,8 @@ emitExpr e fs
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Deref expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Add expr expr_s) <- e = let
-                                   (dt, ct, fs') = emitExpr expr fs
-                                   save = ["    push %rax"]
-                                   (dt1, ct1, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
-                                   restore_add = ["    pop %r10", "    add %r10,%rax"]
-                               in (dt ++ dt1, ct ++ save ++ ct1 ++ restore_add, fs'' {sp_loc = sp_loc fs'' - 8})
-    | (Sub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Add expr expr_s) <- e = emitBinOp expr expr_s ["    add %r10,%rax"] fs
+    | (Sub expr expr_s) <- e = emitBinOp expr expr_s ["    sub %r10,%rax"] fs
     | (Mul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Div expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Mod expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -169,18 +169,7 @@ emitExpr e fs
     | (Ge expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Lt expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Le expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Eq expr expr_s) <- e = let
-                                (dt1, ct1, fs') = emitExpr expr fs
-                                (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
-                                ct3 = ct1 ++ 
-                                        ["    push %rax"] ++ 
-                                        ct2 ++ 
-                                        ["    pop %r10",
-                                        "    cmp %rax,%r10", 
-                                        "    setz %al",
-                                        "    movzx %al,%rax"]
-                              in
-                              (dt1 ++ dt2, ct3, fs'' {sp_loc = sp_loc fs'' - 8})
+    | (Eq expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %rax,%r10", "    setz %al", "    movzx %al,%rax"] fs
     | (NotEq expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (BitOr expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (BitAnd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -202,6 +191,7 @@ emitExpr e fs
     | (IncR expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecL expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecR expr) <- e = error $ "emitExpr todo: " ++ (show e)
+    -- Leave the returned value in RAX, so as to return it
     | (Assign expr expr_s) <- e = let
                                     (dt, ct, fs') = emitAddrExpr expr fs
                                     tmp = ["    push %rax"]
@@ -224,8 +214,14 @@ emitExpr e fs
                                         (dt2, ct2, fs'') = emitFunCall args fs'
                                      in (dt ++ dt2, ct ++ ct2, fs'')
 
-emitBinOp :: Expr -> Expr -> [String] -> (DataText, CodeText, FuncState)
-emitBinOp expr expr_s op_lines = undefined
+-- For operation lines, assumes two args are in RAX and R10, result is in RAX
+emitBinOp :: Expr -> Expr -> [String] -> FuncState -> (DataText, CodeText, FuncState)
+emitBinOp expr expr_s op_lines fs = let
+                                    (dt1, ct1, fs') = emitExpr expr fs
+                                    (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
+                                    ct3 = ct1 ++ ["    push %rax"] ++ ct2 ++ ["    pop %r10"] ++ op_lines
+                                 in
+                                 (dt1 ++ dt2, ct3, fs'' {sp_loc = sp_loc fs'' - 8})
 
 -- Stack pointer must be 16 byte aligned, it will always be 8 byte aligned here
 -- RAX must have 0 to state that no sse registers are used
