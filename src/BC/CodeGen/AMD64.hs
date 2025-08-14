@@ -107,11 +107,18 @@ emitAutos vns fs = undefined
 addExterns :: [VarName] -> FuncState -> FuncState
 addExterns vns fs = fs { var_type = foldl' (\hm x -> HM.insert x ExternT hm) (var_type fs) vns }
 
+-- Use original function state, except for name state; bring back stack pointer
 emitCompounds :: [Statement] -> FuncState -> (DataText, CodeText, FuncState)
-emitCompounds (st:sts) fs = let (dt, ct, fs') = emitStmt st fs
-                                (dt2, ct2, fs'') = emitCompounds sts fs'
-                            in (dt ++ dt2, ct ++ ct2, fs'')
-emitCompounds [] fs = ([], [], fs)
+emitCompounds sts fs = let (dt, ct, fs') = emitCompounds' sts fs
+                       in (dt, 
+                           ct ++ ["    add $" ++ show ((sp_loc fs') - (sp_loc fs)) ++ ",%rsp"], 
+                           fs {name_state = name_state fs'})
+
+emitCompounds' :: [Statement] -> FuncState -> (DataText, CodeText, FuncState)
+emitCompounds' (st:sts) fs = let (dt, ct, fs') = emitStmt st fs
+                                 (dt2, ct2, fs'') = emitCompounds' sts fs'
+                             in (dt ++ dt2, ct ++ ct2, fs'')
+emitCompounds' [] fs = ([], [], fs)
 
 -- Put the address to be assigned to into RAX
 -- This returns the LValue context (where to assign)!
@@ -216,6 +223,9 @@ emitExpr e fs
                                         (dt, ct, fs') = emitType addr fs
                                         (dt2, ct2, fs'') = emitFunCall args fs'
                                      in (dt ++ dt2, ct ++ ct2, fs'')
+
+emitBinOp :: Expr -> Expr -> [String] -> (DataText, CodeText, FuncState)
+emitBinOp expr expr_s op_lines = undefined
 
 -- Stack pointer must be 16 byte aligned, it will always be 8 byte aligned here
 -- RAX must have 0 to state that no sse registers are used
