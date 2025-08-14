@@ -48,8 +48,12 @@ pFloat = FloatT <$> lexeme L.float
 stringLiteral :: Parser String
 stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
 
+-- Un-escape all the escapes in a string, e.g. /" -> ///"
+rawString :: String -> String
+rawString s = (drop 1) $ init $ show s
+
 pString :: Parser Expr
-pString = StringT <$> lexeme stringLiteral
+pString = (StringT . rawString) <$> lexeme stringLiteral
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")

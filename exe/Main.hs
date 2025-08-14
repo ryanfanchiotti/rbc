@@ -6,12 +6,6 @@ import qualified BC.CodeGen.AMD64 as A
 import Text.Megaparsec
 import System.Environment
 
-escapeNewlines :: String -> String
-escapeNewlines = foldr step ""
-  where
-    step '\n' acc = '\\':'n':acc
-    step c acc = c:acc
-
 main :: IO ()
 main = do
      args <- getArgs
@@ -25,6 +19,5 @@ main = do
           Right result -> do
                return result
      let prog_lines = A.emitProg prog
-     let escaped_lines = map escapeNewlines prog_lines
-     writeFile output (unlines escaped_lines)
+     writeFile output (unlines prog_lines)
 
