@@ -1,6 +1,8 @@
 main() {
-    auto a;
-    //a = 1;
-    //printf("a = %d\n", a);
-    //return a;
+    extrn printf;
+    auto a, b;
+    a = 1;
+    b = a + 5;
+    printf("a = %d, b = %d\n", a, b);
+    return b - a;
 }

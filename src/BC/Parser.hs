@@ -39,6 +39,9 @@ pInteger = IntT <$> lexeme L.decimal
 pChar :: Parser Expr
 pChar = IntT . DC.ord <$> lexeme (between (symbol "\'") (symbol "\'") asciiChar)
 
+pZero :: Parser Expr
+pZero = IntT <$> (return 0 <* lexeme (char '0'))
+
 pOctal :: Parser Expr
 pOctal = IntT <$> lexeme (char '0' >> L.octal)
 
@@ -66,6 +69,7 @@ pTerm = choice
     [ parens pExpr
     , pVariable
     , try pFloat
+    , pZero
     , pOctal
     , pChar
     , pInteger

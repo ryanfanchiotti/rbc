@@ -15,7 +15,7 @@ module BC.CodeGen.AMD64 (
 -- R10, R11: not preserved across func calls
 -- RSP: stack pointer, must be 16 byte aligned across function calls
 -- RBP: frame pointer, used for accessing variables:
--- (RBP - 8 for saved old RBP - address), preserved across func calls
+-- (RBP - address), preserved across func calls
 
 -- NO POINTER ARITHMETIC (cannot tell what vars are pointers in an untyped lang)
 -- Vectors -> Start address + index * 8 (often, this means a[b] != b[a])
@@ -44,6 +44,20 @@ data FuncState = FuncState
     -- State for name generation
     , name_state :: NameState
     } deriving (Eq, Show, Ord)
+
+-- Variable offset in the stack as a string
+getVarOffset :: FuncState -> VarName -> String
+getVarOffset fs vn = case HM.lookup vn (var_loc fs) of
+                        (Just i) -> show i
+                        Nothing -> error ("offset of var " ++ vn ++ " not found in\n"
+                            ++ show fs ++ "\nshould be unreachable")
+
+-- Type associated with a variable
+getVarType :: FuncState -> VarName -> VarType
+getVarType fs vn = case HM.lookup vn (var_type fs) of
+                        (Just t) -> t
+                        Nothing -> error ("type of var " ++ vn ++ " not found in\n"
+                            ++ show fs ++ "\nshould be unreachable")
 
 -- Take a program and return lines to be mapped to a file
 emitProg :: Program -> [String]
@@ -74,9 +88,9 @@ emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r
                           regs = zip args reg_list
                           setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
                           setup_args = map ("    push " ++) (take (length args) reg_list)
-                          fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, idx + 8 + (8 * idx))) (zip [0..] args))
+                          fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))
                                          , var_type = HM.fromList (zip args (repeat AutoT)) 
-                                         , sp_loc = (length args) * 8 + 8 
+                                         , sp_loc = (length args) * 8
                                          , name_state = ns }
                       in (setup_frame ++ setup_args, fs)
 
@@ -90,7 +104,24 @@ emitStmt s fs
     | (Compound stmts) <- s = emitCompounds stmts fs
     | (If e stmt) <- s = undefined
     | (IfElse e stmt_f stmt_s) <- s = undefined
-    | (While e stmt) <- s = undefined
+    | (While e stmt) <- s = let ns = name_state fs
+                                (start_lab, ns') = makeLabel ns
+                                (end_lab, ns'') = makeLabel ns'
+                                fs' = fs {name_state = ns''}
+
+                                (dt, ct, fs'') = emitExpr e fs'
+                                goto_end = ["    cmp $0, %rax", "    je " ++ end_lab]
+                                
+                                (dt2, ct2, fs''') = emitStmt stmt fs''
+
+                                diff = (sp_loc fs''') - (sp_loc fs)
+                                restore_stack = ["    add $" ++ show diff ++ ",%rsp"]
+                                goto_start = ["    jmp " ++ start_lab]
+                                
+                                unscoped_fs = fs {name_state = name_state fs'''}
+                            in (dt ++ dt2, 
+                               [start_lab ++ ":"] ++ ct ++ goto_end ++ ct2 ++ restore_stack ++ goto_start ++ [end_lab ++ ":"], 
+                               unscoped_fs)
     | (Switch e stmt) <- s = undefined
     | (Goto ln) <- s = ([], ["    jmp " ++ ln], fs)
     | (Return (Just e)) <- s = let (dt, ct, fs') = emitExpr e fs
@@ -129,13 +160,13 @@ emitCompounds' [] fs = ([], [], fs)
 -- This returns the LValue context (where to assign)!
 emitAddrExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitAddrExpr e fs
-    | (Var vn) <- e, (var_type fs) HM.! vn == AutoT = 
-        ([], ["    mov %rbp,%rax", "sub $" ++ (show ((var_loc fs) HM.! vn)) ++ ",%rax"], fs)
-    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT = ([], ["    lea " ++ vn ++ "(%rip),%rax"], fs)
+    | (Var vn) <- e, getVarType fs vn == AutoT = 
+        ([], ["    mov %rbp,%rax", "    sub $" ++ (getVarOffset fs vn) ++ ",%rax"], fs)
+    | (Var vn) <- e, getVarType fs vn == ExternT = ([], ["    lea " ++ vn ++ "(%rip),%rax"], fs)
     -- Address will simply be the result of expr
     | (Deref expr) <- e = emitExpr expr fs
     -- Expr + index * 8
-    | (VecIdx index name) <- e = undefined
+    | (VecIdx index name) <- e = emitExpr (Add (Mul index (IntT 8)) name) fs
 
 -- Put the result of an expression into RAX
 -- This returns the RValue context (what is inside a variable, etc)!
@@ -144,9 +175,9 @@ emitAddrExpr e fs
 emitExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitExpr e fs
     -- Auto vars are on the stack, extern vars are in .data
-    | (Var vn) <- e, (var_type fs) HM.! vn == AutoT = 
-        ([], ["    mov -" ++ (show ((var_loc fs) HM.! vn)) ++ "(%rbp),%rax"], fs)
-    | (Var vn) <- e, (var_type fs) HM.! vn == ExternT =
+    | (Var vn) <- e, getVarType fs vn == AutoT = 
+        ([], ["    mov -" ++ (getVarOffset fs vn) ++ "(%rbp),%rax"], fs)
+    | (Var vn) <- e, getVarType fs vn == ExternT =
         ([], ["    mov " ++ vn ++ "(%rip),%rax"], fs)
     | (IntT i) <- e = ([], ["    mov $" ++ (show i) ++ ",%rax"], fs)
     -- Floating point numbers are stored as integers here
@@ -158,18 +189,20 @@ emitExpr e fs
                          in
                          ([name ++ ": .asciz \"" ++ s ++ "\""], ["    lea " ++ name ++ "(%rip),%rax"], fs')
     | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Deref expr) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Deref expr) <- e = let (dt, ct, fs') = emitExpr expr fs
+                              deref = ["    mov (%rax),%rax"]
+                          in (dt, ct ++ deref, fs')
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Add expr expr_s) <- e = emitBinOp expr expr_s ["    add %r10,%rax"] fs
     | (Sub expr expr_s) <- e = emitBinOp expr expr_s ["    sub %r10,%rax"] fs
-    | (Mul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Mul expr expr_s) <- e = emitBinOp expr expr_s ["    imul %r10,%rax"] fs
     | (Div expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Mod expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Gt expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Ge expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Lt expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Lt expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setl %al", "    movzx %al,%rax"] fs
     | (Le expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Eq expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %rax,%r10", "    setz %al", "    movzx %al,%rax"] fs
+    | (Eq expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setz %al", "    movzx %al,%rax"] fs
     | (NotEq expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (BitOr expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (BitAnd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -196,7 +229,7 @@ emitExpr e fs
                                     (dt, ct, fs') = emitAddrExpr expr fs
                                     tmp = ["    push %rax"]
                                     (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
-                                    move = ["    pop %r10", "mov %rax,(%r10)"]
+                                    move = ["    pop %r10", "    mov %rax,(%r10)"]
                                   in (dt ++ dt2, ct ++ tmp ++ ct2 ++ move, fs'' {sp_loc = sp_loc fs'' - 8})
     | (AssignAdd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignSub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -217,8 +250,8 @@ emitExpr e fs
 -- For operation lines, assumes two args are in RAX and R10, result is in RAX
 emitBinOp :: Expr -> Expr -> [String] -> FuncState -> (DataText, CodeText, FuncState)
 emitBinOp expr expr_s op_lines fs = let
-                                    (dt1, ct1, fs') = emitExpr expr fs
-                                    (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
+                                    (dt1, ct1, fs') = emitExpr expr_s fs
+                                    (dt2, ct2, fs'') = emitExpr expr (fs' {sp_loc = sp_loc fs' + 8})
                                     ct3 = ct1 ++ ["    push %rax"] ++ ct2 ++ ["    pop %r10"] ++ op_lines
                                  in
                                  (dt1 ++ dt2, ct3, fs'' {sp_loc = sp_loc fs'' - 8})
@@ -231,22 +264,23 @@ emitFunCall es fs = let
                         regs = (map Just ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]) ++ (repeat Nothing)
                         new_es = zip es regs 
 
-                        total_stack = sp_loc fs
+                        -- 8 extra bytes come from pushing RBP in the prelude
+                        total_stack = sp_loc fs + 8
                         needs_align = total_stack `mod` 16 /= 0
                         
+                        push_loc = ["    push %rax"]
+                        (move_d, move_c, fs'') = moveArgs new_es fs { sp_loc = total_stack + 8 }
+                        -- Get function to call that was pushed from RAX
+                        call_pre = ["    xor %rax,%rax",
+                                    "    pop %r11"]
                         align_inst = if needs_align
                                         then ["    sub $8,%rsp"]
                                         else []
-                        push_loc = ["    push %rax"]
-                        (move_d, move_c, _) = moveArgs new_es fs { sp_loc = total_stack + 8 }
-                        -- Get function to call that was pushed from RAX
-                        call_pre = ["    xor %rax,%rax",
-                                "    pop %r11"]
                         call = ["    call *%r11"]
                         -- Move the stack pointer back where it should be
                         adj_stack = if needs_align then ["    add $8,%rsp"] else []
                     -- Use original function state, since the location was popped off the stack
-                    in (move_d, push_loc ++ move_c ++ call_pre ++ align_inst ++ call ++ adj_stack, fs)
+                    in (move_d, push_loc ++ move_c ++ call_pre ++ align_inst ++ call ++ adj_stack, fs'' {sp_loc = sp_loc fs'' - 8})
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)
