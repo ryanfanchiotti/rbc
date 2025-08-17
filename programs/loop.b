@@ -6,4 +6,5 @@ main() {
         printf("i = %d\n", i);
         i = i + 1;
     }
+    return i;
 }

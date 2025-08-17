@@ -89,7 +89,7 @@ emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r
                           setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
                           setup_args = map ("    push " ++) (take (length args) reg_list)
                           fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))
-                                         , var_type = HM.fromList (zip args (repeat AutoT)) 
+                                         , var_type = HM.fromList (zip args (repeat AutoT))
                                          , sp_loc = (length args) * 8
                                          , name_state = ns }
                       in (setup_frame ++ setup_args, fs)
@@ -111,16 +111,16 @@ emitStmt s fs
 
                                 (dt, ct, fs'') = emitExpr e fs'
                                 goto_end = ["    cmp $0, %rax", "    je " ++ end_lab]
-                                
+
                                 (dt2, ct2, fs''') = emitStmt stmt fs''
 
                                 diff = (sp_loc fs''') - (sp_loc fs)
                                 restore_stack = ["    add $" ++ show diff ++ ",%rsp"]
                                 goto_start = ["    jmp " ++ start_lab]
-                                
+
                                 unscoped_fs = fs {name_state = name_state fs'''}
-                            in (dt ++ dt2, 
-                               [start_lab ++ ":"] ++ ct ++ goto_end ++ ct2 ++ restore_stack ++ goto_start ++ [end_lab ++ ":"], 
+                            in (dt ++ dt2,
+                               [start_lab ++ ":"] ++ ct ++ goto_end ++ ct2 ++ restore_stack ++ goto_start ++ [end_lab ++ ":"],
                                unscoped_fs)
     | (Switch e stmt) <- s = undefined
     | (Goto ln) <- s = ([], ["    jmp " ++ ln], fs)
@@ -146,8 +146,8 @@ addExterns vns fs = fs { var_type = foldl' (\hm x -> HM.insert x ExternT hm) (va
 -- Use original function state, except for name state; bring back stack pointer
 emitCompounds :: [Statement] -> FuncState -> (DataText, CodeText, FuncState)
 emitCompounds sts fs = let (dt, ct, fs') = emitCompounds' sts fs
-                       in (dt, 
-                           ct ++ ["    add $" ++ show ((sp_loc fs') - (sp_loc fs)) ++ ",%rsp"], 
+                       in (dt,
+                           ct ++ ["    add $" ++ show ((sp_loc fs') - (sp_loc fs)) ++ ",%rsp"],
                            fs {name_state = name_state fs'})
 
 emitCompounds' :: [Statement] -> FuncState -> (DataText, CodeText, FuncState)
@@ -160,7 +160,7 @@ emitCompounds' [] fs = ([], [], fs)
 -- This returns the LValue context (where to assign)!
 emitAddrExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitAddrExpr e fs
-    | (Var vn) <- e, getVarType fs vn == AutoT = 
+    | (Var vn) <- e, getVarType fs vn == AutoT =
         ([], ["    mov %rbp,%rax", "    sub $" ++ (getVarOffset fs vn) ++ ",%rax"], fs)
     | (Var vn) <- e, getVarType fs vn == ExternT = ([], ["    lea " ++ vn ++ "(%rip),%rax"], fs)
     -- Address will simply be the result of expr
@@ -175,7 +175,7 @@ emitAddrExpr e fs
 emitExpr :: Expr -> FuncState -> (DataText, CodeText, FuncState)
 emitExpr e fs
     -- Auto vars are on the stack, extern vars are in .data
-    | (Var vn) <- e, getVarType fs vn == AutoT = 
+    | (Var vn) <- e, getVarType fs vn == AutoT =
         ([], ["    mov -" ++ (getVarOffset fs vn) ++ "(%rbp),%rax"], fs)
     | (Var vn) <- e, getVarType fs vn == ExternT =
         ([], ["    mov " ++ vn ++ "(%rip),%rax"], fs)
@@ -262,14 +262,14 @@ emitBinOp expr expr_s op_lines fs = let
 emitFunCall :: [Expr] -> FuncState -> (DataText, CodeText, FuncState)
 emitFunCall es fs = let
                         regs = (map Just ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]) ++ (repeat Nothing)
-                        new_es = zip es regs 
+                        new_es = zip es regs
 
                         -- 8 extra bytes come from pushing RBP in the prelude
                         total_stack = sp_loc fs + 8
                         needs_align = total_stack `mod` 16 /= 0
-                        
+
                         push_loc = ["    push %rax"]
-                        (move_d, move_c, fs'') = moveArgs new_es fs { sp_loc = total_stack + 8 }
+                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = total_stack + 8 }
                         -- Get function to call that was pushed from RAX
                         call_pre = ["    xor %rax,%rax",
                                     "    pop %r11"]
@@ -280,7 +280,7 @@ emitFunCall es fs = let
                         -- Move the stack pointer back where it should be
                         adj_stack = if needs_align then ["    add $8,%rsp"] else []
                     -- Use original function state, since the location was popped off the stack
-                    in (move_d, push_loc ++ move_c ++ call_pre ++ align_inst ++ call ++ adj_stack, fs'' {sp_loc = sp_loc fs'' - 8})
+                    in (move_d, push_loc ++ move_c ++ call_pre ++ align_inst ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8})
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)
@@ -289,4 +289,4 @@ moveArgs ((e, Just reg):es) fs = let
                                     (dt2, ct2, fs'') = moveArgs es fs'
                                  in (dt ++ dt2, ct ++ ["    mov %rax," ++ reg] ++ ct2, fs'')
 moveArgs ((_, Nothing):_) _ = error "TODO: function calls with more than 6 args"
-    
+
