@@ -60,7 +60,7 @@ library
                       BC.Analysis
                       BC.NameUtils
                       BC.CodeGen.AMD64
-    build-depends:      base ^>=4.19.2.0
+    build-depends:      base ^>=4.15.1.0
                       , megaparsec ^>= 9.7.0
                       , parser-combinators ^>= 1.3.0
                       , unordered-containers ^>= 0.2.20
@@ -70,7 +70,7 @@ library
 executable bc
     import:           warnings
     main-is:          Main.hs
-    build-depends:    base ^>=4.19.2.0,
+    build-depends:    base ^>=4.15.1.0,
                       megaparsec ^>= 9.7.0,
                       bc
     hs-source-dirs:   exe
@@ -84,7 +84,7 @@ test-suite bc-test
     other-modules: ParserTest
                    AnalysisTest
                    TestUtils
-    build-depends:   base ^>= 4.19.2.0
+    build-depends:   base ^>= 4.15.1.0
                    , hspec ^>= 2.11.12
                    , hspec-megaparsec ^>= 2.2.1
                    , megaparsec >= 9.7.0

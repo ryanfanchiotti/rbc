@@ -2,7 +2,7 @@ module BC.NameUtils (
     makeName,
     makeLabel,
     makeNameState,
-    NameState(..)
+    NameState
 ) where
 
 -- Names are non negative integers that count upwards

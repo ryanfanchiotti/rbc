@@ -269,7 +269,8 @@ emitFunCall es fs = let
                         needs_align = total_stack `mod` 16 /= 0
 
                         push_loc = ["    push %rax"]
-                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = total_stack + 8 }
+                        -- Use `total_stack` here to denote the extra push, not the stored RBP as before
+                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = total_stack }
                         -- Get function to call that was pushed from RAX
                         call_pre = ["    xor %rax,%rax",
                                     "    pop %r11"]

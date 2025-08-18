@@ -67,9 +67,9 @@ isLValue e@(VecIdx _ _) = Right e
 isLValue _ = Left $ "assignment can only be done to vars, derefs, or indexed vecs"
 
 isLValueB :: Expr -> Bool
-isLValueB e@(Var _) = True
-isLValueB e@(Deref _) = True
-isLValueB e@(VecIdx _ _) = True
+isLValueB (Var _) = True
+isLValueB (Deref _) = True
+isLValueB (VecIdx _ _) = True
 isLValueB _ = False
 
 
