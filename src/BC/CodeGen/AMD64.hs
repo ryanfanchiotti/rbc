@@ -102,7 +102,22 @@ emitStmt s fs
     | (LabelDec ln) <- s = ([], [ln ++ ":"], fs)
     | (Case e) <- s = undefined
     | (Compound stmts) <- s = emitCompounds stmts fs
-    | (If e stmt) <- s = undefined
+    | (If e stmt) <- s = let ns = name_state fs
+                             (end_lab, ns') = makeLabel ns
+                             fs' = fs {name_state = ns'}
+
+                             (dt, ct, fs'') = emitExpr e fs'
+                             goto_end = ["    cmp $0, %rax", "    je " ++ end_lab]
+
+                             (dt2, ct2, fs''') = emitStmt stmt fs''
+
+                             diff = (sp_loc fs''') - (sp_loc fs)
+                             restore_stack = ["    add $" ++ show diff ++ ",%rsp"]
+
+                             unscoped_fs = fs {name_state = name_state fs'''}
+                         in (dt ++ dt2,
+                            ct ++ goto_end ++ ct2 ++ restore_stack ++ [end_lab ++ ":"],
+                            unscoped_fs)
     | (IfElse e stmt_f stmt_s) <- s = undefined
     | (While e stmt) <- s = let ns = name_state fs
                                 (start_lab, ns') = makeLabel ns
@@ -167,6 +182,8 @@ emitAddrExpr e fs
     | (Deref expr) <- e = emitExpr expr fs
     -- Expr + index * 8
     | (VecIdx index name) <- e = emitExpr (Add (Mul index (IntT 8)) name) fs
+    | otherwise = error $ "emitAddrExpr called on\n" ++ show e ++ 
+        "\nwhich is not an LValue, should be unreachable"
 
 -- Put the result of an expression into RAX
 -- This returns the RValue context (what is inside a variable, etc)!
@@ -197,7 +214,7 @@ emitExpr e fs
     | (Sub expr expr_s) <- e = emitBinOp expr expr_s ["    sub %r10,%rax"] fs
     | (Mul expr expr_s) <- e = emitBinOp expr expr_s ["    imul %r10,%rax"] fs
     | (Div expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Mod expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Mod expr expr_s) <- e = emitBinOp expr expr_s ["    xor %rdx,%rdx", "    idiv %r10", "    mov %rdx,%rax"] fs
     | (Gt expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Ge expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Lt expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setl %al", "    movzx %al,%rax"] fs
@@ -209,7 +226,7 @@ emitExpr e fs
     | (ShiftL expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (ShiftR expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (TernIf cond true_e false_e) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (VecIdx idx name) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (VecIdx idx name) <- e = emitExpr (Deref (Add name (Mul idx (IntT 8)))) fs
     -- When a function is called on an LValue, use the LValue context when
     -- trying to call what is at the given address
     | (FunCall args addr) <- e, isLValueB addr = funCall addr args emitAddrExpr
@@ -220,7 +237,7 @@ emitExpr e fs
     -- get segfaults
 
     | (Addr expr) <- e = emitAddrExpr e fs
-    | (IncL expr) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (IncL expr) <- e = emitExpr (Assign expr (Add expr (IntT 1))) fs
     | (IncR expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecL expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecR expr) <- e = error $ "emitExpr todo: " ++ (show e)
@@ -231,7 +248,7 @@ emitExpr e fs
                                     (dt2, ct2, fs'') = emitExpr expr_s (fs' {sp_loc = sp_loc fs' + 8})
                                     move = ["    pop %r10", "    mov %rax,(%r10)"]
                                   in (dt ++ dt2, ct ++ tmp ++ ct2 ++ move, fs'' {sp_loc = sp_loc fs'' - 8})
-    | (AssignAdd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (AssignAdd expr expr_s) <- e = emitExpr (Assign expr (Add expr expr_s)) fs
     | (AssignSub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignMul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignDiv expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
