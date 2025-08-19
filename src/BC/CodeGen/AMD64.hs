@@ -76,8 +76,11 @@ emitDef (Func name args stmt) ns = let lab = [name ++ ":"]
                                        (dt, ct, fs') = emitStmt stmt fs
                                        post = if name == "main" then ["    xor %rax,%rax"] ++ emitReturn else []
                                    in (dt, lab ++ prelude ++ ct ++ post, name_state fs')
-emitDef (Global name m_expr) ns = undefined
+emitDef (Global name (Just (IntT i))) ns = ([name ++ ": .quad " ++ show i], [], ns)
+emitDef (Global name Nothing) ns = ([name ++ ": .quad 0"], [], ns)
 emitDef (GlobalVec name m_size m_init_list) ns = undefined
+emitDef d _ = error $ "non const global\n" ++ show d
+                ++ "\nshould be unreachable"
 
 emitReturn :: [String]
 emitReturn = ["    mov %rbp,%rsp", "    pop %rbp", "    ret"]

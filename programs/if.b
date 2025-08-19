@@ -1,6 +1,5 @@
 main(argc, argv) {
-    extrn puts;
-    extrn printf;
+    extrn puts, printf;
     if (argc < 3) {
         puts("Small arg count!");
     }
