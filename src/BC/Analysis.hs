@@ -72,7 +72,6 @@ isLValueB (Deref _) = True
 isLValueB (VecIdx _ _) = True
 isLValueB _ = False
 
-
 -- Are this Expr and the nested Exprs inside of it valid?
 -- Perform constant folding where possible
 analyzeExpr :: DefinedVars -> Expr -> Either Error Expr
@@ -230,7 +229,7 @@ defName (GlobalVec n _ _) = n
 analyzeProg :: Program -> Either Error Program
 analyzeProg prog = do
     let names = map defName prog
-    (prog', _) <- analyzeProg' S.empty prog
+    (prog', _) <- analyzeProg' (S.fromList names) prog
     let hasDupes xs = length xs /= (length $ S.fromList xs)
     if hasDupes names
         then Left "duplicate definitions at top level"
@@ -241,13 +240,12 @@ analyzeProg' dv def_l
     | [] <- def_l = Right ([], dv)
 
     | ((Func name args stmt):defs) <- def_l = do
-        let dv_funcname = S.union dv $ S.fromList [name]
-        let dv' = S.union dv_funcname (S.fromList args)
+        let dv' = S.union dv (S.fromList args)
         (_, stmt', labels, gotos) <- analyzeStatement (dv', stmt, S.empty, S.empty) OtherS
-        (next, _) <- analyzeProg' dv_funcname defs
+        (next, _) <- analyzeProg' dv defs
         -- Make sure there are no gotos leading to nowhere
         if gotos `S.isSubsetOf` labels 
-            then (Right ((Func name args stmt'):next, dv_funcname))
+            then (Right ((Func name args stmt'):next, dv))
             else Left "gotos are not a subset of labels"
 
     | ((Global name (Just expr)):defs) <- def_l,

@@ -65,44 +65,45 @@ getVarType fs vn = case HM.lookup vn (var_type fs) of
 
 -- Take a program and return lines to be mapped to a file
 emitProg :: Program -> [String]
-emitProg p = let (dt, ct, _) = emitProg' p makeNameState
+emitProg p = let top_names = map defName p
+                 (dt, ct, _) = emitProg' p makeNameState top_names
              in map ((".global " ++) . defName) p ++ [".data"] ++ dt ++ [".text"] ++ ct
 
-emitProg' :: Program -> NameState -> (DataText, CodeText, NameState)
-emitProg' (def:defs) ns = let (dt, ct, ns') = emitDef def ns
-                              (dt2, ct2, ns'') = emitProg' defs ns'
-                          in (dt ++ dt2, ct ++ ct2, ns'')
-emitProg' [] ns = ([], [], ns)
+emitProg' :: Program -> NameState -> [VarName] -> (DataText, CodeText, NameState)
+emitProg' (def:defs) ns top_names = let (dt, ct, ns') = emitDef def ns top_names
+                                        (dt2, ct2, ns'') = emitProg' defs ns' top_names
+                                    in (dt ++ dt2, ct ++ ct2, ns'')
+emitProg' [] ns _ = ([], [], ns)
 
-emitDef :: Definition -> NameState -> (DataText, CodeText, NameState)
-emitDef (Func name args stmt) ns = let lab = [name ++ ":"]
-                                       (prelude, fs) = emitPrelude args ns
-                                       (dt, ct, fs') = emitStmt stmt fs
-                                       post = if name == "main" then ["    xor %rax,%rax"] ++ emitReturn else []
-                                   in (dt, lab ++ prelude ++ ct ++ post, name_state fs')
-emitDef (Global name (Just (IntT i))) ns = ([name ++ ": .quad " ++ show i], [], ns)
-emitDef (Global name Nothing) ns = ([name ++ ": .quad 0"], [], ns)
-emitDef (GlobalVec name m_size m_init_list) ns = undefined
-emitDef d _ = error $ "non const global\n" ++ show d
+emitDef :: Definition -> NameState -> [VarName] -> (DataText, CodeText, NameState)
+emitDef (Func name args stmt) ns top_names = let lab = [name ++ ":"]
+                                                 (prelude, fs) = emitPrelude args ns top_names
+                                                 (dt, ct, fs') = emitStmt stmt fs
+                                                 post = if name == "main" then ["    xor %rax,%rax"] ++ emitReturn else []
+                                             in (dt, lab ++ prelude ++ ct ++ post, name_state fs')
+emitDef (Global name (Just (IntT i))) ns _ = ([name ++ ": .quad " ++ show i], [], ns)
+emitDef (Global name Nothing) ns _ = ([name ++ ": .quad 0"], [], ns)
+emitDef (GlobalVec name m_size m_init_list) ns _ = undefined
+emitDef d _ _ = error $ "non const global\n" ++ show d
                 ++ "\nshould be unreachable"
 
 emitReturn :: [String]
 emitReturn = ["    mov %rbp,%rsp", "    pop %rbp", "    ret"]
 
 -- Push RBP and rest of args onto stack and note location in function state
-emitPrelude :: [VarName] -> NameState -> ([String], FuncState)
-emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
-                          regs = zip args reg_list
-                          setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
-                          setup_args = map ("    push " ++) (take (length args) reg_list)
-                          fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))
-                                         , var_type = HM.fromList (zip args (repeat AutoT))
-                                         , sp_loc = (length args) * 8
-                                         , name_state = ns
-                                         -- In worst case, this will cause an error (jmp without a location)
-                                         , break_lbl = ""
-                                         , continue_lbl = "" }
-                      in (setup_frame ++ setup_args, fs)
+emitPrelude :: [VarName] -> NameState -> [VarName] -> ([String], FuncState)
+emitPrelude args ns top_names = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
+                                    regs = zip args reg_list
+                                    setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
+                                    setup_args = map ("    push " ++) (take (length args) reg_list)
+                                    fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))
+                                                     , var_type = HM.fromList ((zip args (repeat AutoT)) ++ (zip top_names (repeat ExternT)))
+                                                     , sp_loc = (length args) * 8
+                                                     , name_state = ns
+                                                     -- In worst case, this will cause an error (jmp without a location)
+                                                     , break_lbl = ""
+                                                    , continue_lbl = "" }
+                                in (setup_frame ++ setup_args, fs)
 
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
 emitStmt s fs
@@ -240,22 +241,22 @@ emitExpr e fs
                          ([name ++ ": .asciz \"" ++ s ++ "\""], ["    lea " ++ name ++ "(%rip),%rax"], fs')
     | (Neg expr) <- e = emitUnaryOp expr ["    neg %rax"] fs
     | (Deref expr) <- e = emitUnaryOp expr ["    mov (%rax),%rax"] fs
-    | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Not expr) <- e = emitUnaryOp expr ["    neg %rax"] fs
     | (Add expr expr_s) <- e = emitBinOp expr expr_s ["    add %r10,%rax"] fs
     | (Sub expr expr_s) <- e = emitBinOp expr expr_s ["    sub %r10,%rax"] fs
     | (Mul expr expr_s) <- e = emitBinOp expr expr_s ["    imul %r10,%rax"] fs
-    | (Div expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Div expr expr_s) <- e = emitBinOp expr expr_s ["    xor %rdx,%rdx", "    idiv %r10"] fs
     | (Mod expr expr_s) <- e = emitBinOp expr expr_s ["    xor %rdx,%rdx", "    idiv %r10", "    mov %rdx,%rax"] fs
-    | (Gt expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Ge expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Gt expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setg %al", "    movzx %al,%rax"] fs
+    | (Ge expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setge %al", "    movzx %al,%rax"] fs
     | (Lt expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setl %al", "    movzx %al,%rax"] fs
-    | (Le expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (Le expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setle %al", "    movzx %al,%rax"] fs
     | (Eq expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setz %al", "    movzx %al,%rax"] fs
-    | (NotEq expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (BitOr expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (BitAnd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (ShiftL expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (ShiftR expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (NotEq expr expr_s) <- e = emitBinOp expr expr_s ["    cmp %r10,%rax", "    setnz %al", "    movzx %al,%rax"] fs
+    | (BitOr expr expr_s) <- e = emitBinOp expr expr_s ["    or %r10,%rax"] fs
+    | (BitAnd expr expr_s) <- e = emitBinOp expr expr_s ["    and %r10,%rax"] fs
+    | (ShiftL expr expr_s) <- e = emitBinOp expr expr_s ["    mov %r10b,%cl", "    shl %cl,%rax"] fs
+    | (ShiftR expr expr_s) <- e = emitBinOp expr expr_s ["    mov %r10b,%cl", "    shr %cl,%rax"] fs
     | (TernIf cond true_e false_e) <- e = error $ "emitExpr todo: " ++ (show e)
     | (VecIdx idx name) <- e = emitExpr (Deref (Add name (Mul idx (IntT 8)))) fs
     -- When a function is called on an LValue, use the LValue context when
@@ -269,9 +270,11 @@ emitExpr e fs
 
     | (Addr expr) <- e = emitAddrExpr expr fs
     | (IncL expr) <- e = emitExpr (Assign expr (Add expr (IntT 1))) fs
-    | (IncR expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (DecL expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (DecR expr) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (IncR expr) <- e = let (dt, ct, fs') = emitExpr (IncL expr) fs
+                         in (dt, ct ++ ["    dec %rax"], fs')
+    | (DecL expr) <- e = emitExpr (Assign expr (Sub expr (IntT 1))) fs
+    | (DecR expr) <- e = let (dt, ct, fs') = emitExpr (DecL expr) fs
+                         in (dt, ct ++ ["    inc %rax"], fs')
     -- Leave the returned value in RAX, so as to return it
     | (Assign expr expr_s) <- e = let
                                     (dt, ct, fs') = emitAddrExpr expr fs
@@ -280,14 +283,14 @@ emitExpr e fs
                                     move = ["    pop %r10", "    mov %rax,(%r10)"]
                                   in (dt ++ dt2, ct ++ tmp ++ ct2 ++ move, fs'' {sp_loc = sp_loc fs'' - 8})
     | (AssignAdd expr expr_s) <- e = emitExpr (Assign expr (Add expr expr_s)) fs
-    | (AssignSub expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignMul expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignDiv expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignMod expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignBitOr expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignBitAnd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignShiftL expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (AssignShiftR expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (AssignSub expr expr_s) <- e = emitExpr (Assign expr (Sub expr expr_s)) fs
+    | (AssignMul expr expr_s) <- e = emitExpr (Assign expr (Mul expr expr_s)) fs
+    | (AssignDiv expr expr_s) <- e = emitExpr (Assign expr (Div expr expr_s)) fs
+    | (AssignMod expr expr_s) <- e = emitExpr (Assign expr (Mod expr expr_s)) fs
+    | (AssignBitOr expr expr_s) <- e = emitExpr (Assign expr (BitOr expr expr_s)) fs
+    | (AssignBitAnd expr expr_s) <- e = emitExpr (Assign expr (BitAnd expr expr_s)) fs
+    | (AssignShiftL expr expr_s) <- e = emitExpr (Assign expr (ShiftL expr expr_s)) fs
+    | (AssignShiftR expr expr_s) <- e = emitExpr (Assign expr (ShiftR expr expr_s)) fs
     | otherwise = error $ "emitting bad expr\n" ++ show e
     where
         funCall addr args emitType = let
