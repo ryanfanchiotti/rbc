@@ -121,7 +121,30 @@ emitStmt s fs
                          in (dt ++ dt2,
                             ct ++ goto_end ++ ct2 ++ restore_stack ++ [end_lab ++ ":"],
                             unscoped_fs)
-    | (IfElse e stmt_f stmt_s) <- s = undefined
+    | (IfElse e stmt_f stmt_s) <- s = let ns = name_state fs
+                                          (else_lab, ns') = makeLabel ns
+                                          (end_lab, ns'') = makeLabel ns'
+                                          fs' = fs {name_state = ns''}
+
+                                          (dt, ct, fs'') = emitExpr e fs'
+                                          goto_else = ["    cmp $0, %rax", "    je " ++ else_lab]
+
+                                          (dt2, ct2, fs''') = emitStmt stmt_f fs''
+                                          (dt3, ct3, fs'''') = emitStmt stmt_s fs'' {name_state = name_state fs'''}
+
+                                          diff2 = (sp_loc fs''') - (sp_loc fs)
+                                          diff3 = (sp_loc fs'''') - (sp_loc fs)
+
+                                          restore_stack2 = ["    add $" ++ show diff2 ++ ",%rsp"]
+                                          restore_stack3 = ["    add $" ++ show diff3 ++ ",%rsp"]
+
+                                          jmp_end = ["    jmp " ++ show end_lab]
+
+                                          unscoped_fs = fs {name_state = name_state fs''''}
+                                      in (dt ++ dt2 ++ dt3,
+                                         ct ++ goto_else ++ ct2 ++ restore_stack2 ++ jmp_end ++ [else_lab ++ ":"]
+                                         ++ ct3 ++ restore_stack3 ++ [end_lab ++ ":"],
+                                         unscoped_fs)
     | (While e stmt) <- s = let ns = name_state fs
                                 (start_lab, ns') = makeLabel ns
                                 (end_lab, ns'') = makeLabel ns'
@@ -239,7 +262,7 @@ emitExpr e fs
     -- Otherwise we will assign to variable contents, etc and probably
     -- get segfaults
 
-    | (Addr expr) <- e = emitAddrExpr e fs
+    | (Addr expr) <- e = emitAddrExpr expr fs
     | (IncL expr) <- e = emitExpr (Assign expr (Add expr (IntT 1))) fs
     | (IncR expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (DecL expr) <- e = error $ "emitExpr todo: " ++ (show e)
