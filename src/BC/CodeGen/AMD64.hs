@@ -43,6 +43,10 @@ data FuncState = FuncState
     , sp_loc :: Int
     -- State for name generation
     , name_state :: NameState
+    -- Label to `break` to
+    , break_lbl :: VarName
+    -- Label to `continue` to
+    , continue_lbl :: VarName
     } deriving (Eq, Show, Ord)
 
 -- Variable offset in the stack as a string
@@ -61,7 +65,7 @@ getVarType fs vn = case HM.lookup vn (var_type fs) of
 
 -- Take a program and return lines to be mapped to a file
 emitProg :: Program -> [String]
-emitProg p = let (dt, ct, ns) = emitProg' p makeNameState
+emitProg p = let (dt, ct, _) = emitProg' p makeNameState
              in map ((".global " ++) . defName) p ++ [".data"] ++ dt ++ [".text"] ++ ct
 
 emitProg' :: Program -> NameState -> (DataText, CodeText, NameState)
@@ -94,7 +98,10 @@ emitPrelude args ns = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r
                           fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))
                                          , var_type = HM.fromList (zip args (repeat AutoT))
                                          , sp_loc = (length args) * 8
-                                         , name_state = ns }
+                                         , name_state = ns
+                                         -- In worst case, this will cause an error (jmp without a location)
+                                         , break_lbl = ""
+                                         , continue_lbl = "" }
                       in (setup_frame ++ setup_args, fs)
 
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
@@ -153,7 +160,7 @@ emitStmt s fs
                                 (dt, ct, fs'') = emitExpr e fs'
                                 goto_end = ["    cmp $0, %rax", "    je " ++ end_lab]
 
-                                (dt2, ct2, fs''') = emitStmt stmt fs''
+                                (dt2, ct2, fs''') = emitStmt stmt fs'' {break_lbl = end_lab, continue_lbl = start_lab}
 
                                 diff = (sp_loc fs''') - (sp_loc fs)
                                 restore_stack = ["    add $" ++ show diff ++ ",%rsp"]
@@ -231,10 +238,8 @@ emitExpr e fs
                             fs' = fs { name_state = ns }
                          in
                          ([name ++ ": .asciz \"" ++ s ++ "\""], ["    lea " ++ name ++ "(%rip),%rax"], fs')
-    | (Neg expr) <- e = error $ "emitExpr todo: " ++ (show e)
-    | (Deref expr) <- e = let (dt, ct, fs') = emitExpr expr fs
-                              deref = ["    mov (%rax),%rax"]
-                          in (dt, ct ++ deref, fs')
+    | (Neg expr) <- e = emitUnaryOp expr ["    neg %rax"] fs
+    | (Deref expr) <- e = emitUnaryOp expr ["    mov (%rax),%rax"] fs
     | (Not expr) <- e = error $ "emitExpr todo: " ++ (show e)
     | (Add expr expr_s) <- e = emitBinOp expr expr_s ["    add %r10,%rax"] fs
     | (Sub expr expr_s) <- e = emitBinOp expr expr_s ["    sub %r10,%rax"] fs
@@ -283,7 +288,7 @@ emitExpr e fs
     | (AssignBitAnd expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignShiftL expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
     | (AssignShiftR expr expr_s) <- e = error $ "emitExpr todo: " ++ (show e)
-
+    | otherwise = error $ "emitting bad expr\n" ++ show e
     where
         funCall addr args emitType = let
                                         (dt, ct, fs') = emitType addr fs
@@ -298,6 +303,11 @@ emitBinOp expr expr_s op_lines fs = let
                                     ct3 = ct1 ++ ["    push %rax"] ++ ct2 ++ ["    pop %r10"] ++ op_lines
                                  in
                                  (dt1 ++ dt2, ct3, fs'' {sp_loc = sp_loc fs'' - 8})
+
+-- For operation lines, assumes arg is in RAX, result is in RAX
+emitUnaryOp :: Expr -> [String] -> FuncState -> (DataText, CodeText, FuncState)
+emitUnaryOp expr op_lines fs = let (dt, ct, fs') = emitExpr expr fs
+                               in (dt, ct ++ op_lines, fs')
 
 -- Stack pointer must be 16 byte aligned, it will always be 8 byte aligned here
 -- RAX must have 0 to state that no sse registers are used
