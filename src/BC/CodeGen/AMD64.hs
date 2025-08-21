@@ -67,7 +67,8 @@ getVarType fs vn = case HM.lookup vn (var_type fs) of
 emitProg :: Program -> [String]
 emitProg p = let top_names = map defName p
                  (dt, ct, _) = emitProg' p makeNameState top_names
-             in map ((".global " ++) . defName) p ++ [".data"] ++ dt ++ [".text"] ++ ct
+             in [".section .note.GNU-stack,\"\",@progbits"] ++ map ((".global " ++) . defName) p
+                ++ [".data"] ++ dt ++ [".text"] ++ ct
 
 emitProg' :: Program -> NameState -> [VarName] -> (DataText, CodeText, NameState)
 emitProg' (def:defs) ns top_names = let (dt, ct, ns') = emitDef def ns top_names
@@ -79,13 +80,30 @@ emitDef :: Definition -> NameState -> [VarName] -> (DataText, CodeText, NameStat
 emitDef (Func name args stmt) ns top_names = let lab = [name ++ ":"]
                                                  (prelude, fs) = emitPrelude args ns top_names
                                                  (dt, ct, fs') = emitStmt stmt fs
-                                                 post = if name == "main" then ["    xor %rax,%rax"] ++ emitReturn else []
+                                                 post = ["    xor %rax,%rax"] ++ emitReturn
                                              in (dt, lab ++ prelude ++ ct ++ post, name_state fs')
 emitDef (Global name (Just (IntT i))) ns _ = ([name ++ ": .quad " ++ show i], [], ns)
 emitDef (Global name Nothing) ns _ = ([name ++ ": .quad 0"], [], ns)
-emitDef (GlobalVec name m_size m_init_list) ns _ = undefined
-emitDef d _ _ = error $ "non const global\n" ++ show d
+emitDef (GlobalVec name (Just (IntT sz)) Nothing) ns _ = emitGlobalVec name sz [] ns
+emitDef (GlobalVec name (Just (IntT sz)) (Just init_l)) ns _ = emitGlobalVec name sz init_l ns
+emitDef (GlobalVec name Nothing (Just init_l)) ns _ = emitGlobalVec name 0 init_l ns
+emitDef d _ _ = error $ "non const global or global vec with no size\n" ++ show d
                 ++ "\nshould be unreachable"
+
+extractInt :: Expr -> Int
+extractInt (IntT i) = i
+extractInt e = error $ "non const expr in global vec:\n" ++ show e
+
+-- Puts the array and a pointer to the start in .data
+-- Not ideal but since we have no types using the vec's name would simply lead to the first elem
+emitGlobalVec :: VarName -> Int -> [Expr] -> NameState -> (DataText, CodeText, NameState)
+emitGlobalVec vn sz exprs ns = let real_sz = max sz $ length exprs
+                                   real_exprs = map extractInt exprs
+                                   full_exprs = real_exprs ++ (replicate (real_sz - (length exprs)) 0)
+                                   (arr_name, ns') = makeName ns
+                                   arr = [arr_name ++ ": .quad " ++ (concat $ intersperse ", " $ map show full_exprs)]
+                                   arr_ptr = [vn ++ ": .quad " ++ arr_name]
+                               in (arr ++ arr_ptr, [], ns')
 
 emitReturn :: [String]
 emitReturn = ["    mov %rbp,%rsp", "    pop %rbp", "    ret"]
@@ -93,7 +111,6 @@ emitReturn = ["    mov %rbp,%rsp", "    pop %rbp", "    ret"]
 -- Push RBP and rest of args onto stack and note location in function state
 emitPrelude :: [VarName] -> NameState -> [VarName] -> ([String], FuncState)
 emitPrelude args ns top_names = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
-                                    regs = zip args reg_list
                                     setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
                                     setup_args = map ("    push " ++) (take (length args) reg_list)
                                     fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))

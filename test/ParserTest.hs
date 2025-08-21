@@ -104,7 +104,7 @@ checkDefs = describe "tests for definition parsing (functions and globals)" $ do
             )
         )
     it "parses a vector definition with an initialization list" $
-        parse (pDef <* eof) "" "vec[3] {1, 2, 3};" `shouldParse`
+        parse (pDef <* eof) "" "vec[3] 1, 2, 3;" `shouldParse`
         (GlobalVec "vec" (Just (IntT 3)) (Just ([IntT 1, IntT 2, IntT 3])))
     it "parses a global def with a value" $
         parse (pDef <* eof) "" "glob 1;" `shouldParse` (Global "glob" (Just (IntT 1)))

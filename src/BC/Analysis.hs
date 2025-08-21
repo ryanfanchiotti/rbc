@@ -211,13 +211,10 @@ analyzeStatement si ps
 
 -- Analyze a compound statement
 analyzeComp :: StatementInfo -> ParentS -> [Statement] -> Either Error ([Statement], Labels, Gotos)
-analyzeComp (defv, cmpd, l, g) par (x:xs) = case x of
-    -- Any code past Return in a compound statement is dead
-    r@(Return _) -> Right ([r], l, g)
-    _ -> do
-        (defv', st', l', g') <- analyzeStatement (defv, x, l, g) par
-        (next, l'', g'') <- analyzeComp (defv', cmpd, l', g') par xs
-        return (st' : next, l'', g'')
+analyzeComp (defv, cmpd, l, g) par (x:xs) = do
+    (defv', st', l', g') <- analyzeStatement (defv, x, l, g) par
+    (next, l'', g'') <- analyzeComp (defv', cmpd, l', g') par xs
+    return (st' : next, l'', g'')
 analyzeComp (_, _, l, g) _ [] = Right ([], l, g)
 
 defName :: Definition -> String

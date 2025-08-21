@@ -115,7 +115,8 @@ checkStatementAnalysis = describe "tests for analyzing a statement" $ do
                   ExprT (Assign (Var "a") (IntT 5)),
                   LabelDec "heaven",
                   Auto [("hello", Nothing)],
-                  Return Nothing ])
+                  Return Nothing,
+                  ExprT (Assign (Var "a") (IntT 5)) ])
         
         sw = (Switch (IntT 3) 
             (Compound 

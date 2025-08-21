@@ -271,9 +271,7 @@ pGlobalVec = do
 
 pInitVals :: Parser [Expr]
 pInitVals = do
-    _ <- symbol "{"
-    exprs <- pExpr `sepBy` (symbol ",")
-    _ <- symbol "}"
+    exprs <- pExpr `sepBy1` (symbol ",")
     return exprs
 
 pGlobal :: Parser Definition
