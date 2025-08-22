@@ -1,3 +1,4 @@
+
 printarr(myauto) {
     auto i;
     extrn printf;

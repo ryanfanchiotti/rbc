@@ -282,4 +282,7 @@ pGlobal = do
     return $ Global name expr
 
 pProg :: Parser Program
-pProg = many pDef
+pProg = do
+    _ <- sc
+    many pDef
+

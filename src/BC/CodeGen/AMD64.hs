@@ -228,17 +228,23 @@ emitAutos ((vn, Nothing):vns) fs = let fs' = fs { sp_loc = sp_loc fs + 8
                                                 , var_loc = HM.insert vn (sp_loc fs + 8) (var_loc fs)
                                                 , var_type = HM.insert vn AutoT (var_type fs) }
                                        (dt, ct, fs'') = emitAutos vns fs'
-                                   in (dt, ["    pushq $0"] ++ ct, fs'')
+                                   in (dt, fixRSP fs ++ ["    pushq $0"] ++ ct, fs'')
 emitAutos ((vn, (Just (IntT vec_size))):vns) fs = let sz = (8 * (vec_size + 1))
                                                       end = sp_loc fs + sz
                                                       fs' = fs { sp_loc = end
                                                                , var_loc = HM.insert vn end (var_loc fs)
                                                                , var_type = HM.insert vn AutoT (var_type fs) }
                                                       (dt, ct, fs'') = emitAutos vns fs'
-                                                  in (dt, ["    sub $" ++ show sz ++ ",%rsp",
-                                                           "    lea 8(%rsp),%rax", "    mov %rax,(%rsp)"] ++ ct, fs'')
+                                                  in (dt, fixRSP fs ++ ["    sub $" ++ show sz ++ ",%rsp",
+                                                          "    lea 8(%rsp),%rax", "    mov %rax,(%rsp)"] ++ ct, fs'')
 emitAutos ((_, _):_) _ = error "non-const auto size, should be unreachable"
 emitAutos [] fs = ([], [], fs)
+
+-- Make sure RSP is in the same place as the function state thinks it is 
+-- before putting variables on the stack
+-- Needed for code that jumps out of scopes with allocations using `goto`
+fixRSP :: FuncState -> CodeText
+fixRSP fs = ["    lea -" ++ (show $ sp_loc fs) ++ "(%rbp),%rsp"]
 
 addExterns :: [VarName] -> FuncState -> FuncState
 addExterns vns fs = fs { var_type = foldl' (\hm x -> HM.insert x ExternT hm) (var_type fs) vns }
