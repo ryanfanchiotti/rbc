@@ -47,6 +47,8 @@ data FuncState = FuncState
     , break_lbl :: VarName
     -- Label to `continue` to
     , continue_lbl :: VarName
+    -- Ending label for above switch statement
+    , switch_lbl :: VarName
     } deriving (Eq, Show, Ord)
 
 -- Variable offset in the stack as a string
@@ -119,7 +121,8 @@ emitPrelude args ns top_names = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", 
                                                      , name_state = ns
                                                      -- In worst case, this will cause an error (jmp without a location)
                                                      , break_lbl = ""
-                                                    , continue_lbl = "" }
+                                                     , continue_lbl = ""
+                                                     , switch_lbl = "" }
                                 in (setup_frame ++ setup_args, fs)
 
 emitStmt :: Statement -> FuncState -> (DataText, CodeText, FuncState)
@@ -128,7 +131,7 @@ emitStmt s fs
     -- Externs are dealt with automatically by gas
     | (Extern vns) <- s = ([], [], addExterns vns fs)
     | (LabelDec ln) <- s = ([], [ln ++ ":"], fs)
-    | (Case e) <- s = undefined
+    | (Case (IntT i)) <- s = ([], [switch_lbl fs ++ "_" ++ show i ++ ":"], fs)
     | (Compound stmts) <- s = emitCompounds stmts fs
     | (If e stmt) <- s = let ns = name_state fs
                              (end_lab, ns') = makeLabel ns
@@ -188,12 +191,36 @@ emitStmt s fs
                             in (dt ++ dt2,
                                [start_lab ++ ":"] ++ ct ++ goto_end ++ ct2 ++ restore_stack ++ goto_start ++ [end_lab ++ ":"],
                                unscoped_fs)
-    | (Switch e stmt) <- s = undefined
+    | (Switch e stmt) <- s = let cases = findSubCases stmt
+                                 (dt, ct, fs') = emitExpr e fs
+                                 (label, ns') = makeLabel $ name_state fs'
+                                 jumps = emitJumps cases label
+                                 (dt2, ct2, fs'') = emitStmt stmt fs' { name_state = ns', switch_lbl = label }
+
+                                 diff = (sp_loc fs'') - (sp_loc fs)
+                                 restore_stack = ["    add $" ++ show diff ++ ",%rsp"]
+                                 unscoped_fs = fs {name_state = name_state fs''}
+                             in (dt ++ dt2, ct ++ jumps ++ ct2 ++ restore_stack ++ [label ++ ":"], unscoped_fs)
     | (Goto ln) <- s = ([], ["    jmp " ++ ln], fs)
     | (Return (Just e)) <- s = let (dt, ct, fs') = emitExpr e fs
                                in (dt, ct ++ emitReturn, fs')
     | (Return Nothing) <- s = ([], ["    xor %rax,%rax"] ++ emitReturn, fs)
     | (ExprT e) <- s = emitExpr e fs
+    | otherwise = error $ "bad stmt:\n" ++ show s
+
+-- Cases to jump to will follow `end_lab_const`
+emitJumps :: [Int] -> String -> CodeText
+emitJumps cases end_lab = concatMap (\i -> ["    cmp $" ++ show i ++ ",%rax", "    je " ++ end_lab ++ "_" ++ show i]) cases
+                          ++ ["    jmp " ++ end_lab]
+
+-- Find all case statements not part of another switch scope
+findSubCases :: Statement -> [Int]
+findSubCases (Case (IntT i)) = [i]
+findSubCases (While _ stmt) = findSubCases stmt
+findSubCases (If _ stmt) = findSubCases stmt
+findSubCases (IfElse _ stmt_f stmt_s) = findSubCases stmt_f ++ findSubCases stmt_s
+findSubCases (Compound stmts) = concatMap findSubCases stmts
+findSubCases _ = []
 
 -- Autos have optional const-expr size
 emitAutos :: [(VarName, Maybe Expr)] -> FuncState -> (DataText, CodeText, FuncState)
@@ -256,7 +283,7 @@ emitExpr e fs
         ([], ["    mov " ++ vn ++ "(%rip),%rax"], fs)
     | (IntT i) <- e = ([], ["    mov $" ++ (show i) ++ ",%rax"], fs)
     -- Floating point numbers are stored as integers here
-    | (FloatT d) <- e = error $ "emitExpr todo: " ++ (show e)
+    | (FloatT _) <- e = error $ "emitExpr todo: " ++ (show e)
     -- Strings are in pointers to null terminated strings in .data
     | (StringT s) <- e = let
                             (name, ns) = makeName $ name_state fs
@@ -281,7 +308,8 @@ emitExpr e fs
     | (BitAnd expr expr_s) <- e = emitBinOp expr expr_s ["    and %r10,%rax"] fs
     | (ShiftL expr expr_s) <- e = emitBinOp expr expr_s ["    mov %r10b,%cl", "    shl %cl,%rax"] fs
     | (ShiftR expr expr_s) <- e = emitBinOp expr expr_s ["    mov %r10b,%cl", "    shr %cl,%rax"] fs
-    | (TernIf cond true_e false_e) <- e = error $ "emitExpr todo: " ++ (show e)
+    -- Bit of a hack for now
+    | (TernIf cond true_e false_e) <- e = emitStmt (IfElse cond (ExprT true_e) (ExprT false_e)) fs
     | (VecIdx idx name) <- e = emitExpr (Deref (Add name (Mul idx (IntT 8)))) fs
     -- When a function is called on an LValue, use the LValue context when
     -- trying to call what is at the given address

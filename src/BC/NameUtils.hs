@@ -11,7 +11,7 @@ type NameState = Int
 makeNameState :: NameState
 makeNameState = 0
 
--- Names in programs cannot start with a dot, therefore
+-- Names in programs cannot start with an underscore, therefore
 -- all generated names that do are valid 
 makeName :: NameState -> (String, NameState)
 makeName ns = ("_N" ++ (show ns), ns + 1)

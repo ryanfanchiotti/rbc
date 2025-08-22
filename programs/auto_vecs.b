@@ -2,7 +2,7 @@ printarr(myauto) {
     auto i;
     extrn printf;
     i = 0;
-    printf("myauto = %d\n", myauto);
+    printf("myauto = %p\n", myauto);
     while (i < 3) {
         printf("myauto[%d] = %d\n", i, myauto[i]);
         i++;

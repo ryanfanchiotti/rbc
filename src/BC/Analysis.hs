@@ -178,16 +178,16 @@ analyzeStatement si ps
         return (dv, Compound stmts', labels', gotos')
     | (If e stmt) <- s = do
         e' <- analyzeExpr dv e
-        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) OtherS
+        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) ps
         return (dv, If e' stmt', l, g)
     | (IfElse e f_stmt s_stmt) <- s = do
         e' <- analyzeExpr dv e
-        (_, f_stmt', l_f, g_f) <- analyzeStatement (dv, f_stmt, labels, gotos) OtherS
-        (_, s_stmt', l_s, g_s) <- analyzeStatement (dv, s_stmt, labels, gotos) OtherS
+        (_, f_stmt', l_f, g_f) <- analyzeStatement (dv, f_stmt, labels, gotos) ps
+        (_, s_stmt', l_s, g_s) <- analyzeStatement (dv, s_stmt, labels, gotos) ps
         return (dv, IfElse e' f_stmt' s_stmt', S.union l_f l_s, S.union g_f g_s)
     | (While e stmt) <- s = do
         e' <- analyzeExpr dv e
-        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) OtherS
+        (_, stmt', l, g) <- analyzeStatement (dv, stmt, labels, gotos) ps
         return (dv, While e' stmt', l, g)
     | (Switch e stmt) <- s = do
         e' <- analyzeExpr dv e
