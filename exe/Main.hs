@@ -15,7 +15,7 @@ import System.Process (callCommand)
 import System.Directory
 import System.IO
 
-compiler :: Flag "o" '["output-file"] "\"a.out\"" "output location" (Def "a.out" String)
+compiler :: Flag "o" '["output-file"] "a.out" "output location" (Def "a.out" String)
          -> Flag "S" '["emit-asm"] "false" "stop after assembly stage" Bool
          -> Flag "c" '["emit-obj"] "false" "stop after object stage" Bool
          -> Flag "s" '["static-link-libc"] "false" "link with the C runtime statically instead of dynamically" Bool
@@ -44,8 +44,8 @@ emit p output = let p_lines = CGA.emitProg p
 compile :: String -> Bool -> Bool -> Bool -> String -> IO ()
 compile output emit_asm emit_obj static input = do
     ast <- parse input
-    -- correct_ast <- analyze ast
-    emit ast output 
+    correct_ast <- analyze ast
+    emit correct_ast output 
     when emit_asm exitSuccess
     commandWithTemp output "as" ""
     when emit_obj exitSuccess
@@ -53,7 +53,7 @@ compile output emit_asm emit_obj static input = do
 
 commandWithTemp :: FilePath -> String -> String -> IO ()
 commandWithTemp output prog extra = do
-    (temp_out, _) <- openTempFile "" "rbc-tmp"
+    (temp_out, _) <- openTempFile "" "rbc.tmp"
     callCommand $ prog ++ " -o " ++ temp_out ++ " " ++ output ++ extra
     renameFile temp_out output
 
