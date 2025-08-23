@@ -1,6 +1,6 @@
 ## Ryan's B Compiler 
 
-Outside dependencies:
+#### Outside dependencies:
 - ghc
 - cabal
 - GNU as
@@ -10,13 +10,15 @@ Basic usage: `cabal run exe:rbc -o OUTPUT FILE`
 
 Example programs are in `/programs`
 
-Pitfalls:
+#### Pitfalls:
 - Unlike in C, a[b] is not always equal to b[a], since words are not 1 byte and
 B has no concept of pointer math, as every variable is simply a quadword in memory
 - +=, -=, ... operators are reversed from the original spec to make the language 
 have one less wart for users used to C, as well as remove ambiguity from parsing
 - Instead of libb.a, this compiler links with the libc present, meaning that \\ is used
 instead of \* (as one normally would in C)
+- Code generation is currently very nasty and focuses on being correct after strange jumps
+rather than speed
 
 #### Helpful links:
 1. [Megaparsec tutorial](https://markkarpov.com/tutorial/megaparsec.html)
