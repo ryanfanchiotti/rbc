@@ -70,12 +70,12 @@ library
 executable rbc
     import:           warnings
     main-is:          Main.hs
-    build-depends:    base ^>=4.15.1.0,
-                      megaparsec ^>= 9.5.0,
-                      optparse-declarative ^>= 0.4.0,
-                      process ^>= 1.6.0,
-                      directory ^>= 1.3.6.0,
-                      rbc
+    build-depends:      base ^>=4.15.1.0
+                      , megaparsec ^>= 9.5.0
+                      , optparse-declarative ^>= 0.4.0
+                      , process ^>= 1.6.0
+                      , directory ^>= 1.3.6.0
+                      , rbc
     hs-source-dirs:   exe
     default-language: Haskell2010
 
