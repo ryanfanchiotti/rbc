@@ -15,8 +15,8 @@ Example programs are in `/programs`
 B has no concept of pointer math, as every variable is simply a quadword in memory
 - +=, -=, ... operators are reversed from the original spec to make the language 
 have one less wart for users used to C, as well as remove ambiguity from parsing
-- Instead of libb.a, this compiler links with the libc present, meaning that \\ is used
-instead of \* (as one normally would in C)
+- Instead of libb.a, this compiler links with the libc present on a system, meaning 
+that \\ is used for escapes instead of \* (as one normally would in C, e.g. \"\\n\")
 - Code generation is currently very nasty and focuses on being correct after strange jumps
 rather than speed
 
