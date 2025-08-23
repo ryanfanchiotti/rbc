@@ -6,8 +6,8 @@ import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import BC.Parser
-import BC.Syntax
+import RBC.Parser
+import RBC.Syntax
 
 checkExprs :: Spec
 checkExprs = describe "tests for exprs (which roughly correspond to an rvalue)" $ do

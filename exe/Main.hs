@@ -2,10 +2,10 @@
 
 module Main where
 
-import qualified BC.Syntax as S
-import qualified BC.Parser as P
-import qualified BC.Analysis as A
-import qualified BC.CodeGen.AMD64 as CGA
+import qualified RBC.Syntax as S
+import qualified RBC.Parser as P
+import qualified RBC.Analysis as A
+import qualified RBC.CodeGen.AMD64 as CGA
 import qualified Text.Megaparsec as TMP
 import Options.Declarative
 import Control.Monad.IO.Class (liftIO)

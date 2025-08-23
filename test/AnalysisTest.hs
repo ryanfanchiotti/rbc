@@ -1,7 +1,7 @@
 module AnalysisTest (analysisSpec) where
 
-import BC.Syntax
-import BC.Analysis
+import RBC.Syntax
+import RBC.Analysis
 import Test.Hspec
 import TestUtils
 import qualified Data.HashSet as S
