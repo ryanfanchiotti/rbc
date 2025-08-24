@@ -395,7 +395,8 @@ emitFunCall es fs = let
                         -- Move the stack pointer back where it should be
                         adj_stack = if needs_align then ["    add $8,%rsp"] else []
                     -- Use original function state, since the location was popped off the stack
-                    in (move_d, push_loc ++ move_c ++ call_pre ++ align_inst ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8})
+                    in (move_d, fixRSP fs ++ push_loc ++ move_c ++ call_pre ++ align_inst
+                       ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8})
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)
