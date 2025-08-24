@@ -22,7 +22,7 @@ module RBC.CodeGen.AMD64 (
 
 -- Strings are put into .data as ascii with a null terminator. For stack allocated strings,
 -- use Vecs and treat each 64 bit value as having 8 characters.
--- This can be done with the syntax `abcdefgh` replacing a quadword
+-- This can be done with the syntax 'abcdefg\0' (for example) replacing a quadword
 
 import RBC.Syntax
 import RBC.Analysis

@@ -9,6 +9,8 @@ import Control.Monad.Combinators.Expr
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import Data.Void (Void)
+import Data.Bits
+import Control.Monad (when)
 import qualified Text.Megaparsec.Char.Lexer as L
 import RBC.Syntax
 import qualified Data.Char as DC
@@ -36,8 +38,22 @@ pVariable = Var <$> pName
 pInteger :: Parser Expr
 pInteger = IntT <$> lexeme L.decimal
 
+charContent :: Parser String
+charContent = do
+    chars <- manyTill L.charLiteral (lookAhead (char '\''))
+    let len = length chars
+    when (len == 0 || len > 8) $
+        fail "char literal length must be between 1 and 8"
+    return chars
+
+-- Packs 1 to 8 characters into a quadword. This hack works fine on little-endian
+-- architectures but will need to be done differently if big-endian architectures
+-- are ever implemented
 pChar :: Parser Expr
-pChar = IntT . DC.ord <$> lexeme (between (symbol "\'") (symbol "\'") asciiChar)
+pChar = IntT . lstOrd <$> lexeme (between (symbol "\'") (symbol "\'") charContent)
+    where
+        shiftNum (i, n) = (DC.ord n) `shiftL` (i * 8)
+        lstOrd xs = sum $ map shiftNum $ zip [0..] xs
 
 pZero :: Parser Expr
 pZero = IntT <$> (return 0 <* lexeme (char '0'))

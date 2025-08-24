@@ -45,6 +45,7 @@ compile :: String -> Bool -> Bool -> Bool -> String -> IO ()
 compile output emit_asm emit_obj static input = do
     ast <- parse input
     correct_ast <- analyze ast
+    putStrLn $ show correct_ast
     emit correct_ast output 
     when emit_asm exitSuccess
     commandWithTemp output "as" ""
