@@ -259,7 +259,8 @@ pExprT = ExprT <$> (pExpr <* (symbol ";"))
 
 pName :: Parser VarName
 pName = lexeme
-  ((:) <$> letterChar <*> many alphaNumChar <?> "name (alpha numeric, starting with letter)")
+    ((:) <$> letterChar <*> 
+    many (choice [alphaNumChar, char '_'])  <?> "name (alpha numeric, starting with letter)")
 
 pDef :: Parser Definition
 pDef = choice
