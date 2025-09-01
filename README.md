@@ -6,9 +6,11 @@
 - GNU as
 - gcc (to link with a C runtime)
 
-Please make sure these are findable in your `$PATH`
+Make sure these are findable in your `$PATH`, if these are not installed on your system 
+this can be done temporarily by linking to executables in a separate directory and
+putting that directory at the front of `$PATH`
 
-Basic usage: `cabal run exe:rbc -o [OUTPUT] [FILE]`
+Basic usage: `cabal run exe:rbc -- -o [OUTPUT] [FILE]`
 
 Example programs are available in `/programs`
 
@@ -20,9 +22,10 @@ B has no concept of pointer math, as every variable is simply a quadword in memo
 have one less wart for users used to C, as well as remove ambiguity from parsing
 - Instead of `libb.a`, this compiler links with the libc present on a system, meaning 
 that \\ is used for escapes instead of \* (as one normally would in C, e.g. `"\n"`)
-- Code generation currently focuses on being correct after strange gotos rather than speed
+- Code generation currently focuses on correctness (and conciseness of compiler)
+- Code generated is not position independent (emit linked functions with @PLT in future?)
 
 #### Helpful links:
-1. [Megaparsec tutorial](https://markkarpov.com/tutorial/megaparsec.html)
-2. [B language reference 1](https://www.thinkage.ca/gcos/expl/b/manu/manu.html)
-3. [B language reference 2](https://www.nokia.com/bell-labs/about/dennis-m-ritchie/kbman.html)
+- [Megaparsec tutorial](https://markkarpov.com/tutorial/megaparsec.html)
+- [B language reference 1](https://www.thinkage.ca/gcos/expl/b/manu/manu.html)
+- [B language reference 2](https://www.nokia.com/bell-labs/about/dennis-m-ritchie/kbman.html)
