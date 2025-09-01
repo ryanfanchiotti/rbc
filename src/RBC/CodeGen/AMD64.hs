@@ -115,9 +115,10 @@ emitPrelude :: [VarName] -> NameState -> [VarName] -> ([String], FuncState)
 emitPrelude args ns top_names = let reg_list = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
                                     setup_frame = ["    push %rbp", "    mov %rsp,%rbp"]
                                     setup_args = map ("    push " ++) (take (length args) reg_list)
-                                    fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, 8 + (8 * idx))) (zip [0..] args))
+                                    arg_loc idx = if idx < length reg_list then 8 + 8 * idx else -16 - (idx - (length reg_list)) * 8
+                                    fs = FuncState { var_loc = HM.fromList (map (\(idx, arg) -> (arg, arg_loc idx)) (zip [0..] args))
                                                      , var_type = HM.fromList ((zip args (repeat AutoT)) ++ (zip top_names (repeat ExternT)))
-                                                     , sp_loc = (length args) * 8
+                                                     , sp_loc = (length (take 6 args)) * 8
                                                      , name_state = ns
                                                      -- In worst case, this will cause an error (jmp without a location)
                                                      , break_lbl = ""
@@ -376,33 +377,37 @@ emitUnaryOp expr op_lines fs = let (dt, ct, fs') = emitExpr expr fs
 emitFunCall :: [Expr] -> FuncState -> (DataText, CodeText, FuncState)
 emitFunCall es fs = let
                         regs = (map Just ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]) ++ (repeat Nothing)
-                        new_es = zip es regs
+                        new_es = zip (take 6 es ++ (reverse $ drop 6 es)) regs
 
+                        stack_arg_space = (length $ drop 6 es) * 8
                         -- 8 extra bytes come from pushing RBP in the prelude
-                        total_stack = sp_loc fs + 8
+                        -- The other 8 bytes come from pushing RAX pre-call
+                        total_stack = sp_loc fs + 16 + stack_arg_space 
                         needs_align = total_stack `mod` 16 /= 0
 
+                        align_amt = if needs_align then 8 else 0
+                        align_inst = ["    sub $" ++ show align_amt ++ ",%rsp"]
                         push_loc = ["    push %rax"]
-                        -- Use `total_stack` here to denote the extra push, not the stored RBP as before
-                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = total_stack }
+                        (move_d, move_c, fs') = moveArgs new_es fs { sp_loc = sp_loc fs + 8 + align_amt }
                         -- Get function to call that was pushed from RAX
                         call_pre = ["    xor %rax,%rax",
-                                    "    pop %r11"]
-                        align_inst = if needs_align
-                                        then ["    sub $8,%rsp"]
-                                        else []
+                                    "    mov " ++ show (-(sp_loc fs + 8)) ++ "(%rbp),%r11"]
                         call = ["    call *%r11"]
                         -- Move the stack pointer back where it should be
-                        adj_stack = if needs_align then ["    add $8,%rsp"] else []
+                        adj_stack = ["    add $" ++ show (align_amt + stack_arg_space + 8) ++  ",%rsp"]
                     -- Use original function state, since the location was popped off the stack
-                    in (move_d, fixRSP fs ++ push_loc ++ move_c ++ call_pre ++ align_inst
-                       ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8})
+                    in (move_d, fixRSP fs ++ push_loc ++ align_inst ++ move_c ++ call_pre
+                       ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8 - stack_arg_space - align_amt})
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)
 moveArgs ((e, Just reg):es) fs = let
-                                    (dt, ct, fs') = emitExpr e fs
-                                    (dt2, ct2, fs'') = moveArgs es fs'
+                                     (dt, ct, fs') = emitExpr e fs
+                                     (dt2, ct2, fs'') = moveArgs es fs'
                                  in (dt ++ dt2, ct ++ ["    mov %rax," ++ reg] ++ ct2, fs'')
-moveArgs ((_, Nothing):_) _ = error "TODO: function calls with more than 6 args"
+moveArgs ((e, Nothing):es) fs = let
+                                    (dt, ct, fs') = emitExpr e fs
+                                    (dt2, ct2, fs'') = moveArgs es fs' {sp_loc = sp_loc fs' + 8}
+                                in (dt ++ dt2, ct ++ ["    push %rax"] ++ ct2, fs'')
+
 
