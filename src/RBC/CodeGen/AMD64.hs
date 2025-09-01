@@ -397,7 +397,7 @@ emitFunCall es fs = let
                         adj_stack = ["    add $" ++ show (align_amt + stack_arg_space + 8) ++  ",%rsp"]
                     -- Use original function state, since the location was popped off the stack
                     in (move_d, fixRSP fs ++ push_loc ++ align_inst ++ move_c ++ call_pre
-                       ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8 - stack_arg_space})
+                       ++ call ++ adj_stack, fs' {sp_loc = sp_loc fs' - 8 - stack_arg_space - align_amt})
 
 moveArgs :: [(Expr, Maybe String)] -> FuncState -> (DataText, CodeText, FuncState)
 moveArgs [] fs = ([], [], fs)
